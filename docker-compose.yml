@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: spending_db
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: fastapi_app
+    deploy:
+      resources:
+        limits:
+          memory: 4G 
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/code
+      # Dùng đường dẫn này để Hoa có thể thấy file model ngay trong folder backend trên Windows
+      - ./backend/models:/code/models 
+    env_file:
+      - ./backend/.env
+    # Sửa lại command để chắc chắn tìm đúng file
+    command: >
+      sh -c "python /code/download_model.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+  # Đã xóa model_data dư thừa vì mình dùng mount trực tiếp thư mục rồi

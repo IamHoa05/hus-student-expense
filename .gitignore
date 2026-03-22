@@ -1,0 +1,18 @@
+*.mp4
+*.zip
+*.rar
+.idea/
+__pycache__/
+node_modules/
+
+# Loại bỏ các file model nặng từ Hugging Face
+backend/models/
+*.gguf
+*.bin
+*.pth
+*.safetensors
+
+backend/.env
+.env
+
+# Bỏ qua các file nặng khác nếu bạn biết tên
