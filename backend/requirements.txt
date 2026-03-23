@@ -4,11 +4,33 @@ sqlalchemy
 pydantic-settings
 python-dotenv
 alembic
-pandas
-psycopg2-binary
 google-auth
 python-multipart
-transformers
-llama-cpp-python
-huggingface_hub
-Pillow
+
+
+pyotp
+email-validator
+bcrypt
+pyjwt
+passlib[bcrypt]
+python-jose[cryptography] # Thư viện hỗ trợ mã hóa Token JWT rất tốt
+asyncpg
+# --- Xử lý UUID và JSONB (Cho PostgreSQL) ---
+psycopg[binary]      # Hỗ trợ tốt hơn cho các kiểu dữ liệu đặc biệt của Postgres 15/16
+
+# --- Xử lý Decimal và Tiền tệ ---
+# (Thường có sẵn trong Python nhưng SQLAlchemy cần để map dữ liệu DECIMAL(15,2))
+
+# --- Xử lý HTTP Requests (Cần cho NCKH) ---
+httpx                # Để gọi các API bên ngoài hoặc test Async API
+
+# --- Xử lý Auth & Security (Bổ sung cho chắc) ---
+cryptography         # Cần thiết để python-jose và pyjwt hoạt động mượt mà
+
+
+# --- AI (TẠM TẮT ĐỂ MÁY MÁT) ---
+# llama-cpp-python
+# transformers
+# huggingface_hub
+# Pillow
+# pandas

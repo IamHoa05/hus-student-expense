@@ -11,6 +11,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
+    environment:
+      - ENABLE_AI=false  # Khi nào cần test AI thì sửa thành true
     build: ./backend
     container_name: fastapi_app
     deploy:

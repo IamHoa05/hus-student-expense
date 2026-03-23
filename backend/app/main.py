@@ -1,28 +1,37 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager # Thêm cái này để quản lý vòng đời app
 from app.config.database import engine, Base
 from app.config.settings import settings
 
-# Quan trọng: Bạn phải import TẤT CẢ các model vào đây 
-# để SQLAlchemy nhận diện được chúng trước khi tạo bảng.
-from app.models.users import User
-from app.models.wallet import Wallet
-from app.models.transactions import Transaction, Category
-from app.models.shared import SharedWallet, SharedExpense
-from app.models.budget_receipt import Budget, Receipt
+# Import models (Giữ nguyên đống này của Hoa nhé)
+from app.models.user import User
+from app.models.group import Group, GroupMember
+from app.models.category import Category
+from app.models.transaction import Transaction, TransactionDetail, TransactionMedia, ExpenseSplit
+from app.models.financial import Budget, SavingGoal
 
-# Lệnh này sẽ tự động tạo các bảng trong PostgreSQL
-Base.metadata.create_all(bind=engine)
+# 1. Định nghĩa hàm khởi tạo bảng
+async def init_models():
+    async with engine.begin() as conn:
+        # Chạy hàm create_all (vốn là sync) trong môi trường async
+        await conn.run_sync(Base.metadata.create_all)
 
+# 2. Dùng lifespan để chạy init_models khi app vừa bật lên
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Đang khởi tạo Database...")
+    await init_models()
+    print("✅ Database đã sẵn sàng!")
+    yield
+    # (Chỗ này để code dọn dẹp nếu cần khi tắt app)
+
+# 3. Khởi tạo App với lifespan
 app = FastAPI(
     title=settings.APP_NAME,
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    lifespan=lifespan # Truyền lifespan vào đây
 )
 
-# app/main.py
-from app.controllers import receipt_controller
-
-
-# Đăng ký các router
-# Đăng ký router OCR
-app.include_router(receipt_controller.router, prefix="/api/v1/receipts", tags=["OCR"])
-
+# Đăng ký router Auth (Giữ nguyên phần dưới của Hoa)
+from app.controllers import auth_controller
+app.include_router(auth_controller.router, prefix="/api/v1/auth", tags=["Authentication"])

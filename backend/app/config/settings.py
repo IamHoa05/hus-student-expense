@@ -1,31 +1,48 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from typing import Optional
+from pydantic import EmailStr
 
 class Settings(BaseSettings):
     # Các thông tin cơ bản của App
     APP_NAME: str = "S-Wallet"
     DEBUG: bool = True
     
-    # Cấu hình Database (Lấy từ .env)
-    DATABASE_URL: str
+    # Cấu hình Database
+    # Gán mặc định là None hoặc chuỗi rỗng để tránh lỗi nếu .env chưa load kịp
+    DATABASE_URL: Optional[str] = None
     
-    # Cấu hình bảo mật (Cho JWT sau này)
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    #OAUTH
+    OAUTH2_SECRET_KEY: str
+    OAUTH2_ALGORITHM: str = "HS256"
+    OAUTH2_ACCESS_TOKEN_EXPIRE_MINUTES: int = 180
+    OAUTH2_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # Thêm 3 dòng này để Pydantic chấp nhận chúng từ file .env
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
+    # Cấu hình Security
+    SECRET_KEY: str 
 
-    class Config:
-        # Chỉ định file chứa biến môi trường
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"  # Thêm dòng này để lỡ có biến lạ khác nó cũng không báo lỗi nữa
+    # Thông tin DB từ .env
+    POSTGRES_USER: Optional[str] = "user"
+    POSTGRES_PASSWORD: Optional[str] = "password"
+    POSTGRES_DB: Optional[str] = "spending_db"
 
-# Sử dụng lru_cache để không phải đọc file .env nhiều lần, giúp app chạy nhanh hơn
+    #SEND EMAIL
+    MAIL_USERNAME: str
+    MAIL_PASSWORD: str
+    MAIL_FROM: EmailStr
+    MAIL_PORT: int
+    MAIL_SERVER: str
+    MAIL_FROM_NAME: str
+
+    RESET_PASSWORD_TOKEN_EXPIRE_MINUTES: int = 5
+
+    # Pydantic v2 dùng SettingsConfigDict thay vì class Config (nhưng class Config vẫn dùng được)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
 @lru_cache()
 def get_settings():
     return Settings()

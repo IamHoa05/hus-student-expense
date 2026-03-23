@@ -1,21 +1,30 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from .settings import settings
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
-# 1. Tạo Engine kết nối tới PostgreSQL (thông tin lấy từ settings.py)
-engine = create_engine(settings.DATABASE_URL)
+# 1. URL phải bắt đầu bằng postgresql+asyncpg (Hoa nhớ cài pip install asyncpg nhé)
+SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:password123@db:5432/spending_db"
 
-# 2. Tạo SessionLocal để quản lý các phiên làm việc với DB
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# 2. Tạo Engine bất đồng bộ
+engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
 
-# 3. Base class để các Model (User, Transaction) kế thừa
-Base = declarative_base()
+# 3. Tạo SessionLocal bất đồng bộ
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine, 
+    class_=AsyncSession, 
+    expire_on_commit=False
+)
 
-# 4. Hàm Generator để quản lý việc đóng/mở kết nối (Dependency)
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+class Base(DeclarativeBase):
+    pass
+
+# 4. Sửa hàm get_db thành Async (Đây là chỗ Hoa đang bị lỗi)
+async def get_db():
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+            await db.commit() # Tự động commit nếu không có lỗi
+        except Exception:
+            await db.rollback() # Rollback nếu có lỗi
+            raise
+        finally:
+            await db.close() # Đảm bảo đóng kết nối
