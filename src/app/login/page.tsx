@@ -2,14 +2,17 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setTimeout(() => {
       alert("Tính năng đăng nhập Google sẽ được kích hoạt sau!");
+      router.push("/dashboard");
       setIsLoading(false);
     }, 1000);
   };

@@ -5,6 +5,33 @@ import { usePathname } from "next/navigation";
 export default function BottomNavigation() {
   const pathname = usePathname();
 
+  // ==============================================================
+  // LOGIC ẨN THANH ĐIỀU HƯỚNG TẠI CÁC TRANG CHI TIẾT/ĐĂNG NHẬP
+  // ==============================================================
+  const hiddenPaths = [
+    "/",
+    "/login",
+    "/add",
+    "/room/deposit",
+    "/room/split",
+    "/profile",
+    "/dashboard/add",
+    "/dashboard/goals/[Id]",
+    "/notifications",
+  ];
+
+  // Ẩn nếu URL nằm trong danh sách trên, HOẶC là trang chi tiết phân tích (ví dụ: /analytics/cat_food)
+  // nhưng VẪN PHẢI HIỂN THỊ ở trang /analytics gốc
+  const shouldHide =
+    hiddenPaths.includes(pathname) ||
+    (pathname.startsWith("/analytics/") && pathname !== "/analytics") ||
+    pathname.startsWith("/dashboard/goals");
+
+  if (shouldHide) {
+    return null;
+  }
+  // ==============================================================
+
   // Danh sách các tab dựa trên thiết kế của bạn
   const navItems = [
     { name: "Trang chủ", path: "/dashboard", icon: "home" },
