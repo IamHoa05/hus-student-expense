@@ -115,25 +115,10 @@ export default function TransactionsPage() {
         </section>
 
         {/* 3. Xuất báo cáo */}
-        <button className="w-full flex items-center justify-center gap-2 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white py-4 rounded-2xl font-headline font-bold shadow-lg shadow-[#4b5b9a]/20 active:scale-95 transition-transform">
+        {/* <button className="w-full flex items-center justify-center gap-2 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white py-4 rounded-2xl font-headline font-bold shadow-lg shadow-[#4b5b9a]/20 active:scale-95 transition-transform">
           <span className="material-symbols-outlined">file_download</span>
           Xuất báo cáo PDF/Excel
-        </button>
-
-        {/* 4. Tìm kiếm */}
-        <div className="relative group">
-          <span className="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
-            search
-          </span>
-          <input
-            className="w-full bg-[#e2e2e7] border-none rounded-2xl py-5 pl-14 pr-12 text-[#1a1c1f] focus:ring-2 focus:ring-[#4b5b9a]/40 transition-all placeholder:text-[#767681]"
-            placeholder="Tìm 'Cơm < 40k' hoặc 'Grab'"
-            type="text"
-          />
-          <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#767681]">
-            tune
-          </span>
-        </div>
+        </button> */}
 
         {/* 5. Tổng chi tiêu tháng này */}
         <section className="bg-white p-7 rounded-3xl shadow-sm border border-[#e2e2e7]/50">
@@ -191,6 +176,21 @@ export default function TransactionsPage() {
             </p>
           </div>
         </section>
+
+        {/* 4. Tìm kiếm */}
+        <div className="relative group">
+          <span className="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
+            search
+          </span>
+          <input
+            className="w-full bg-[#e2e2e7] border-none rounded-2xl py-5 pl-14 pr-12 text-[#1a1c1f] focus:ring-2 focus:ring-[#4b5b9a]/40 transition-all placeholder:text-[#767681]"
+            placeholder="Tìm 'Cơm < 40k' hoặc 'Grab'"
+            type="text"
+          />
+          <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#767681]">
+            tune
+          </span>
+        </div>
 
         {/* 7. Giao dịch gần đây (Gồm tab Tất cả & Đã quét) */}
         <section className="space-y-6">

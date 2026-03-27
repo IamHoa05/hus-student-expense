@@ -180,7 +180,7 @@ export default function AddTransactionPage() {
             </div>
 
             {/* Category Field */}
-            <div>
+            {/* <div>
               <label
                 className={`block text-[10px] font-extrabold uppercase tracking-[0.2em] mb-4 ml-1 ${
                   transactionType === "income"
@@ -223,7 +223,7 @@ export default function AddTransactionPage() {
                   );
                 })}
               </div>
-            </div>
+            </div> */}
 
             {/* Date and Notes Grid */}
             <div className="space-y-6">

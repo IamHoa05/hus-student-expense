@@ -138,7 +138,7 @@ export default function DashboardPage() {
 
           <div className="z-10">
             <p className="font-body text-sm uppercase tracking-widest text-[#dde1ff] opacity-90 mb-2">
-              Số dư hiện tại
+              Khoản Dư
             </p>
             <h1 className="font-headline font-extrabold text-4xl tracking-tight">
               {formatCurrency(MOCK_BALANCE.current)}
@@ -156,14 +156,6 @@ export default function DashboardPage() {
           <div className="z-10 grid grid-cols-2 gap-8 w-full pt-2 border-t border-white/20 mt-2">
             <div>
               <p className="font-body text-[10px] uppercase tracking-wider text-[#dde1ff] opacity-80 mb-1">
-                Thu nhập
-              </p>
-              <p className="font-headline font-bold text-lg">
-                {formatCurrency(MOCK_BALANCE.income)}
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[10px] uppercase tracking-wider text-[#dde1ff] opacity-80 mb-1">
                 Chi tiêu
               </p>
               <p className="font-headline font-bold text-lg">
@@ -177,7 +169,7 @@ export default function DashboardPage() {
       {/* Analytics Bento Grid */}
       <div className="flex flex-col gap-6">
         {/* Spending Runway Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#e2e2e7]/60 relative overflow-hidden">
+        {/* <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#e2e2e7]/60 relative overflow-hidden">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="font-headline font-bold text-xl text-[#4b5b9a]">
@@ -224,7 +216,7 @@ export default function DashboardPage() {
               <span>"{MOCK_RUNWAY.aiAdvice}"</span>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Saving Goals Tracker */}
         <div className="bg-[#f3f3f8] p-6 rounded-2xl flex flex-col justify-between border border-[#e2e2e7]/60">
