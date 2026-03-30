@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..utils.security import set_auth_cookies
+
 from ..config.database import get_db
 from ..schemas.auth import (
     UserRegister, UserLogin, TokenResponse, 
@@ -9,7 +11,7 @@ from ..schemas.auth import (
 )
 from ..services.auth_service import get_auth_service, AuthService
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # 1. API Đăng ký tài khoản mới
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -27,12 +29,16 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: UserLogin, 
+    response: Response,
     auth_service: AuthService = Depends(get_auth_service)
 ):
     """
     Đăng nhập và nhận Access Token + Refresh Token.
     """
-    return await auth_service.login_user(payload)
+
+    token_data = await auth_service.login_user(payload)
+    set_auth_cookies(response, token_data.access_token, token_data.refresh_token)
+    return token_data
 
 
 # 3. API Làm mới Token (Khi Access Token hết hạn)

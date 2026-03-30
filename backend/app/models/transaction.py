@@ -9,7 +9,7 @@ from sqlalchemy.sql import func
 
 class Transaction(Base):
     __tablename__ = "transaction"
-    transaction_id = Column(Integer, primary_key=True, default=uuid.uuid4)
+    transaction_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id")) # Người tạo giao dịch
     group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True) # Nếu NULL là tiêu cá nhân
     category_id = Column(Integer, ForeignKey("category.category_id")) # Thuộc danh mục nào

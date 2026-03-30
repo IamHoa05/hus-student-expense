@@ -32,6 +32,15 @@ app = FastAPI(
     lifespan=lifespan # Truyền lifespan vào đây
 )
 
-# Đăng ký router Auth (Giữ nguyên phần dưới của Hoa)
-from app.controllers import auth_controller
-app.include_router(auth_controller.router, prefix="/api/v1/auth", tags=["Authentication"])
+
+from .controllers.auth_controller import router as auth_router
+app.include_router(auth_router)
+
+from .controllers.transaction_controller import router as transaction_router
+app.include_router(transaction_router)
+
+from .controllers.category_controller import router as category_router
+app.include_router(category_router)
+
+from .controllers.budget_controller import router as budget_router
+app.include_router(budget_router)

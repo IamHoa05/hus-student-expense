@@ -16,3 +16,9 @@ backend/.env
 .env
 
 # Bỏ qua các file nặng khác nếu bạn biết tên
+# Frontend (Next.js)
+.next/
+node_modules/
+out/
+build/
+next-env.d.ts

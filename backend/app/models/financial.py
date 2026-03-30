@@ -5,7 +5,7 @@ from app.config.database import Base
 from sqlalchemy.orm import relationship
 class Budget(Base):
     __tablename__ = "budget"
-    budget_id = Column(Integer, primary_key=True, default=uuid.uuid4)
+    budget_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
     category_id = Column(Integer, ForeignKey("category.category_id"))
     amount_limit = Column(DECIMAL(15, 2)) # Hạn mức (VD: 2 triệu/tháng)
