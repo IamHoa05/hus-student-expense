@@ -30,6 +30,7 @@ interface ExpenseCategory {
   id: string;
   name: string;
   amount: number;
+  limit: number; // <-- Thêm trường này
   percentage: number;
   icon: string;
   iconBgClass: string;
@@ -58,11 +59,14 @@ const MOCK_GOALS: SavingGoal[] = [
     progressPercent: 30,
   },
 ];
+
+// 2. Cập nhật Mock Data
 const MOCK_CATEGORIES: ExpenseCategory[] = [
   {
     id: "c1",
     name: "Ăn uống",
     amount: 1800000,
+    limit: 3500000, // Hạn mức: 3.5M
     percentage: 51,
     icon: "restaurant",
     iconBgClass: "bg-[#4b5b9a]",
@@ -72,6 +76,7 @@ const MOCK_CATEGORIES: ExpenseCategory[] = [
     id: "c2",
     name: "Học tập",
     amount: 1200000,
+    limit: 3500000, // Hạn mức: 3.5M
     percentage: 34,
     icon: "school",
     iconBgClass: "bg-[#94a3e8]",
@@ -80,8 +85,9 @@ const MOCK_CATEGORIES: ExpenseCategory[] = [
   {
     id: "c3",
     name: "Di chuyển",
-    amount: 350000,
-    percentage: 10,
+    amount: 450000,
+    limit: 500000, // Hạn mức: 500k -> Đã tiêu 450k (90%)
+    percentage: 90, // <-- Cố tình để > 85% để test hiệu ứng ĐỎ CẢNH BÁO
     icon: "directions_bus",
     iconBgClass: "bg-[#c5a344]",
     textHighlightClass: "text-[#755b00]",
@@ -90,6 +96,7 @@ const MOCK_CATEGORIES: ExpenseCategory[] = [
     id: "c4",
     name: "Khác",
     amount: 200000,
+    limit: 4000000, // Hạn mức: 4M
     percentage: 5,
     icon: "more_horiz",
     iconBgClass: "bg-[#c6c5d1]",
@@ -272,40 +279,91 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Category Breakdown */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#e2e2e7]/60">
           <h2 className="font-headline font-bold text-xl mb-5 text-[#1a1c1f]">
             Phân bổ chi tiêu
           </h2>
 
-          <div className="grid grid-cols-1 gap-2">
-            {MOCK_CATEGORIES.map((category) => (
-              <div
-                key={category.id}
-                className="flex items-center gap-3 p-3.5 rounded-xl hover:bg-[#f3f3f8] transition-colors cursor-pointer border border-transparent hover:border-[#e2e2e7]"
-              >
-                <div
-                  className={`w-10 h-10 rounded-full ${category.iconBgClass} flex items-center justify-center text-white shadow-sm`}
+          <div className="grid grid-cols-1 gap-3">
+            {MOCK_CATEGORIES.map((category) => {
+              const isWarning = category.percentage >= 85;
+              const limitAmount =
+                category.limit ||
+                (category.percentage > 0
+                  ? (category.amount * 100) / category.percentage
+                  : 0);
+
+              return (
+                // SỬA ĐƯỜNG DẪN Ở ĐÂY: Trỏ thẳng tới /analytics/[id_danh_mục]
+                <Link
+                  href={`/analytics/${category.id}`}
+                  key={category.id}
+                  className="flex items-start gap-4 p-4 rounded-xl hover:bg-[#f3f3f8] transition-colors cursor-pointer border border-[#e2e2e7]/40 shadow-sm hover:shadow-md group block"
                 >
-                  <span className="material-symbols-outlined text-sm">
-                    {category.icon}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-[#1a1c1f]">
-                    {category.name}
-                  </p>
-                  <p className="text-xs text-[#616470] mt-0.5">
-                    {formatCurrency(category.amount)}
-                  </p>
-                </div>
-                <p
-                  className={`font-bold text-sm ${category.textHighlightClass}`}
-                >
-                  {category.percentage}%
-                </p>
-              </div>
-            ))}
+                  {/* ... (Toàn bộ phần Icon, Tên, Thanh tiến độ giữ nguyên y hệt lúc nãy) ... */}
+                  <div
+                    className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                      isWarning
+                        ? "bg-[#ffdad6] text-[#ba1a1a]"
+                        : "bg-[#f3f3f8] text-[#4b5b9a] group-hover:bg-[#dde1ff]"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[22px]">
+                      {category.icon}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 space-y-2 pt-0.5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-bold text-[#1a1c1f] group-hover:text-[#4b5b9a] transition-colors">
+                          {category.name}
+                        </p>
+                        <p className="text-[11px] text-[#616470] mt-1 font-medium">
+                          <span
+                            className={`font-bold ${
+                              isWarning ? "text-[#ba1a1a]" : "text-[#1a1c1f]"
+                            }`}
+                          >
+                            {formatCurrency(category.amount)}
+                          </span>
+                          <span className="mx-1.5 opacity-50">/</span>
+                          {formatCurrency(limitAmount)}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p
+                          className={`font-headline font-black text-sm ${
+                            isWarning ? "text-[#ba1a1a]" : "text-[#4b5b9a]"
+                          }`}
+                        >
+                          {category.percentage}%
+                        </p>
+                        {isWarning && (
+                          <p className="text-[9px] font-bold uppercase text-[#ba1a1a] tracking-widest mt-0.5">
+                            Sắp vượt mức
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="h-1.5 w-full bg-[#e2e2e7] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${
+                          isWarning
+                            ? "bg-[#ba1a1a]"
+                            : "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8]"
+                        }`}
+                        style={{
+                          width: `${Math.min(category.percentage, 100)}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>

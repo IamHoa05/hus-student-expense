@@ -86,20 +86,6 @@ export default function CategoryDetailPage() {
             {CATEGORY_DATA.name}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
-          <button className="hover:opacity-80 transition-opacity active:scale-95 duration-200 text-[#4b5b9a]">
-            <span className="material-symbols-outlined">calendar_today</span>
-          </button>
-          <div className="w-10 h-10 rounded-full bg-[#e2e2e7] overflow-hidden flex items-center justify-center">
-            <Image
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHtgiqdXbHI1QuoO-LSnP8pSg8pD3yf0vQHCZshXTFFeBi9AfiQhZCgZg6pdyD4qtvusqUIMYQJEUWHvmw0caZcFQq6OtPMFGd6U1qX8sETCy622VUpxAYgBU2TNCxjSIJTeBuByJMxyc8DB3Rj2EyS0zYCrwBC969ntyLsOiJkTrVKLr6HJMMDRllAzN_TtIsYiRwmoH3_U_PY_a2SIJ1l_e-s5FJyxV9ZEL5hyqI3ul_Rhn1M-71kleO4XQsbaagphjddf0OHgE"
-              alt="Avatar"
-              width={40}
-              height={40}
-              className="object-cover w-full h-full"
-            />
-          </div>
-        </div>
       </header>
 
       {/* Nội dung chính, đẩy xuống để không bị TopBar che mất */}
