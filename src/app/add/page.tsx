@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 // 1. Định nghĩa Hạng mục mở rộng
@@ -15,6 +14,13 @@ const CATEGORIES = [
   { id: "c7", name: "Cố định", icon: "home_work" },
   { id: "group", name: "Nhóm", icon: "groups" }, // Nút Nhóm nằm ở đây
   { id: "c8", name: "Khác", icon: "more_horiz" },
+];
+
+// MOCK DATA: Danh sách nhóm (Lấy từ hệ thống Room của bạn)
+const MOCK_GROUPS = [
+  { id: "g1", name: "Phòng 302 - Cầu Giấy", members: 4 },
+  { id: "g2", name: "Hội bạn thân", members: 6 },
+  { id: "g3", name: "Nhóm dự án AI", members: 3 },
 ];
 
 interface ProductItem {
@@ -38,6 +44,10 @@ export default function AddTransactionPage() {
   const [note, setNote] = useState<string>("");
   const [customCategory, setCustomCategory] = useState("");
 
+  // States cho tính năng Nhóm
+  const [selectedGroupId, setSelectedGroupId] = useState(MOCK_GROUPS[0].id);
+  const [isAdvancePayment, setIsAdvancePayment] = useState(true); // Mặc định là có ứng trước
+
   // States cho danh sách sản phẩm
   const [products, setProducts] = useState<ProductItem[]>([
     { id: Date.now(), name: "", qty: 1, price: 0 },
@@ -51,6 +61,9 @@ export default function AddTransactionPage() {
   const totalAmount = useMemo(() => {
     return products.reduce((sum, item) => sum + item.price * item.qty, 0);
   }, [products]);
+
+  const activeGroup =
+    MOCK_GROUPS.find((g) => g.id === selectedGroupId) || MOCK_GROUPS[0];
 
   // Logic sản phẩm
   const addProduct = () =>
@@ -80,10 +93,34 @@ export default function AddTransactionPage() {
     }
   };
 
+  // Logic Xử lý khi Lưu giao dịch
+  const handleSave = () => {
+    let message = `Đã ghi nhận giao dịch ${new Intl.NumberFormat(
+      "vi-VN"
+    ).format(totalAmount)}đ!\n`;
+
+    // Xử lý lưu hạng mục tự tạo
+    if (customCategory.trim() !== "") {
+      message += `\n✅ Hạng mục mới "${customCategory}" đã được lưu vào CSDL để hiển thị ở Dashboard & Phân tích.`;
+    }
+
+    // Xử lý logic chia tiền nhóm
+    if (transactionType === "expense" && selectedCategory === "group") {
+      if (isAdvancePayment) {
+        message += `\n✅ Đã ghi nhận bạn ỨNG TRƯỚC cho nhóm "${activeGroup.name}". (Sẽ chia đều cho ${activeGroup.members} người).`;
+      } else {
+        message += `\n✅ Đã trừ thẳng vào quỹ chung của nhóm "${activeGroup.name}".`;
+      }
+    }
+
+    alert(message);
+    router.push("/dashboard");
+  };
+
   return (
     <main className="flex-grow w-full max-w-md mx-auto pb-40 relative min-h-screen bg-[#f9f9fe]">
       <div className="px-6 pt-6 space-y-6">
-        {/* Header - Đã bỏ nút Cá nhân/Nhóm ở đây */}
+        {/* Header */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
@@ -230,11 +267,11 @@ export default function AddTransactionPage() {
                   onClick={addProduct}
                   className="w-full py-3 border-2 border-dashed border-[#c6c5d1] rounded-2xl text-[10px] font-bold uppercase text-[#767681]"
                 >
-                  + Thêm món mới
+                  + Thêm
                 </button>
               </div>
 
-              {/* Hạng mục (Có nút Nhóm ở đây) */}
+              {/* Hạng mục */}
               <div className="pt-4 border-t border-[#f3f3f8] space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#4b5b9a] tracking-widest">
                   Chọn hạng mục chi tiêu
@@ -263,35 +300,80 @@ export default function AddTransactionPage() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Tên hạng mục khác (ví dụ: Thú cưng...)"
+                  placeholder="Tên hạng mục khác (sẽ tự động lưu lại...)"
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#f3f3f8] rounded-xl border-none text-[10px] font-bold focus:ring-1 focus:ring-[#4b5b9a]"
+                  className="w-full px-4 py-3 bg-[#f3f3f8] rounded-xl border-none text-[10px] font-bold focus:ring-1 focus:ring-[#4b5b9a] placeholder:italic"
                 />
               </div>
             </section>
 
-            {/* Box Chia tiền - Hiện ra khi chọn hạng mục Nhóm */}
+            {/* BOX CHIA TIỀN NHÓM - NÂNG CẤP */}
             {selectedCategory === "group" && (
-              <section className="bg-[#dde1ff] p-5 rounded-[2rem] flex items-center justify-between animate-in slide-in-from-top-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#4b5b9a] rounded-full flex items-center justify-center text-white">
+              <section className="bg-[#dde1ff] p-5 rounded-[2rem] animate-in slide-in-from-top-4 space-y-4 border border-[#4b5b9a]/20">
+                {/* Chọn nhóm */}
+                <div className="flex items-center gap-3 bg-white p-3 rounded-2xl shadow-sm">
+                  <div className="w-10 h-10 bg-[#f3f3f8] rounded-full flex items-center justify-center text-[#4b5b9a] shrink-0">
                     <span className="material-symbols-outlined text-xl">
                       groups
                     </span>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-black text-[#4b5b9a] uppercase">
-                      Hóa đơn nhóm
+                  <div className="flex-grow">
+                    <p className="text-[9px] font-black text-[#767681] uppercase tracking-widest mb-0.5">
+                      Chọn nhóm
                     </p>
-                    <p className="text-[11px] font-bold text-[#1a1c1f]">
-                      Chia đều cho 3 thành viên
+                    <select
+                      value={selectedGroupId}
+                      onChange={(e) => setSelectedGroupId(e.target.value)}
+                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#1a1c1f] focus:ring-0 appearance-none"
+                    >
+                      {MOCK_GROUPS.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name} ({g.members} người)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="material-symbols-outlined text-[#c6c5d1] pr-2">
+                    expand_more
+                  </span>
+                </div>
+
+                {/* Toggle Ứng trước */}
+                <div className="flex items-center justify-between px-2">
+                  <div>
+                    <p className="text-xs font-bold text-[#1a1c1f]">
+                      Tôi đã ứng trước
+                    </p>
+                    <p className="text-[9px] font-medium text-[#767681] mt-0.5">
+                      Trả tiền túi thay vì dùng quỹ chung
                     </p>
                   </div>
+                  <button
+                    onClick={() => setIsAdvancePayment(!isAdvancePayment)}
+                    className={`w-11 h-6 rounded-full relative transition-colors duration-300 ${
+                      isAdvancePayment ? "bg-[#4b5b9a]" : "bg-[#c6c5d1]"
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 bg-white rounded-full absolute top-1 shadow-sm transition-transform duration-300 ${
+                        isAdvancePayment ? "left-6" : "left-1"
+                      }`}
+                    ></div>
+                  </button>
                 </div>
-                <p className="text-sm font-black text-[#4b5b9a]">
-                  {new Intl.NumberFormat("vi-VN").format(totalAmount / 3)}đ/ng
-                </p>
+
+                <div className="flex justify-between items-center pt-3 border-t border-[#4b5b9a]/10 px-2">
+                  <p className="text-[10px] font-bold text-[#4b5b9a]">
+                    Chia cho {activeGroup.members} người:
+                  </p>
+                  <p className="text-sm font-black text-[#4b5b9a]">
+                    {new Intl.NumberFormat("vi-VN").format(
+                      totalAmount / activeGroup.members
+                    )}
+                    đ/ng
+                  </p>
+                </div>
               </section>
             )}
           </>
@@ -325,11 +407,10 @@ export default function AddTransactionPage() {
                 />
               </div>
             </div>
-            {/* Thu nhập chỉ cần Ngày & Ghi chú */}
           </section>
         )}
 
-        {/* Thông tin chung: Ngày & Ghi chú (Cho cả 2 loại) */}
+        {/* Thông tin chung: Ngày & Ghi chú */}
         <section className="space-y-4">
           <div className="flex items-center bg-white p-4 rounded-2xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
             <span
@@ -360,7 +441,7 @@ export default function AddTransactionPage() {
             </span>
             <input
               type="text"
-              placeholder="Ghi chú"
+              placeholder="Ghi chú thêm..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
               className="bg-transparent border-none p-0 text-sm font-medium flex-grow focus:ring-0 text-[#1a1c1f] placeholder:text-[#c6c5d1]"
@@ -370,10 +451,7 @@ export default function AddTransactionPage() {
 
         {/* Nút Save */}
         <button
-          onClick={() => {
-            alert(`Đã ghi nhận ${totalAmount}đ vào ví cá nhân!`);
-            router.push("/dashboard");
-          }}
+          onClick={handleSave}
           disabled={totalAmount <= 0}
           className={`w-full py-5 rounded-[2rem] font-headline font-black text-lg transition-all active:scale-[0.98] shadow-xl ${
             totalAmount <= 0
@@ -389,7 +467,7 @@ export default function AddTransactionPage() {
         </button>
       </div>
 
-      {/* Ảnh nhỏ nổi lên khi dùng OCR */}
+      {/* Ảnh OCR Preview */}
       {ocrPreview && (
         <div className="fixed bottom-32 right-6 w-14 h-18 rounded-lg border-2 border-white shadow-xl overflow-hidden z-40 rotate-6">
           <img
