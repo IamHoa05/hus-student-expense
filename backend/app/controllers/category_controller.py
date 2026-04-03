@@ -51,6 +51,8 @@ async def create_category(
     
 @router.put("/{category_id}", response_model=CategoryResponseSchema)
 async def update_cat(category_id: int, payload: CategoryUpdateSchema, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_user)):
+    """
+    API cho phép người dùng sửa tên danh mục cá nhân của mình. Không thể sửa danh mục hệ thống."""
     service = CategoryService(db)
     updated = await service.update_category(category_id, current_user.user_id, payload.name)
     if not updated:
@@ -59,6 +61,8 @@ async def update_cat(category_id: int, payload: CategoryUpdateSchema, db: AsyncS
 
 @router.delete("/{category_id}")
 async def delete_cat(category_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_user)):
+    """
+    API cho phép người dùng xóa danh mục cá nhân của mình. Không thể xóa danh mục hệ thống. Nếu có giao dịch nào đang sử dụng danh mục này, sẽ trả về lỗi và yêu cầu người dùng xóa các giao dịch đó trước."""
     service = CategoryService(db)
     try:
         success = await service.delete_category(category_id, current_user.user_id)

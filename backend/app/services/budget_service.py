@@ -4,8 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..schemas.budget import BudgetCreateSchema
 from ..config.database import get_db
 from fastapi import Depends
-from ..models.transaction import Transaction # Import để tính tiền đã tiêu
+from ..models.transaction import Transaction, TransactionDetail # Import để tính tiền đã tiêu
 from ..models.category import Category # Import để lấy tên danh mục cho UI
+from datetime import date, datetime, time, timedelta
+import calendar
 
 
 class BudgetService:
@@ -113,6 +115,138 @@ class BudgetService:
 
         # Sắp xếp theo phần trăm tiêu nhiều nhất lên đầu giống UI của bạn
         return sorted(allocation_data, key=lambda x: x['percentage'], reverse=True)
+    
+   
+
+    async def get_custom_range_history(self, user_id: int, start_date: date, end_date: date):
+        """
+        Lấy lịch sử chi tiêu trong khoảng start_date -> end_date tùy chỉnh
+        """
+        # 1. Thiết kế mốc thời gian chuẩn (00:00:00 -> 23:59:59)
+        start_dt = datetime.combine(start_date, time.min)
+        end_dt = datetime.combine(end_date, time.max)
+
+        # 2. Truy vấn Join: Transaction + Category + TransactionDetail
+        stmt = (
+            select(
+                Transaction, 
+                Category.name.label("category_name"),
+                TransactionDetail.note,
+                TransactionDetail.store_name,
+                TransactionDetail.payment_method,
+                TransactionDetail.location
+            )
+            .join(Category, Transaction.category_id == Category.category_id)
+            .outerjoin(TransactionDetail, Transaction.transaction_id == TransactionDetail.transaction_id)
+            .where(
+                and_(
+                    Transaction.user_id == user_id,
+                    Transaction.transaction_type == 'outflow',
+                    Transaction.transaction_date >= start_dt,
+                    Transaction.transaction_date <= end_dt
+                )
+            )
+            .order_by(Transaction.transaction_date.desc())
+        )
+        
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        # 3. Xử lý logic nhóm dữ liệu theo ngày
+        history_map = {}
+        total_period_amount = 0
+
+        for row in rows:
+            trans = row.Transaction
+            # Lấy ngày theo định dạng YYYY-MM-DD để làm key
+            date_key = trans.transaction_date.strftime("%Y-%m-%d")
+            amount = float(trans.total_amount)
+            total_period_amount += amount
+
+            if date_key not in history_map:
+                history_map[date_key] = {
+                    "date": date_key,
+                    "daily_total": 0,
+                    "items": []
+                }
+            
+            # Ưu tiên hiển thị: Ghi chú -> Tên cửa hàng -> Tên danh mục
+            display_title = row.note or row.store_name or row.category_name
+            
+            history_map[date_key]["items"].append({
+                "transaction_id": trans.transaction_id,
+                "title": display_title,
+                "amount": amount,
+                "category": row.category_name,
+                "time": trans.transaction_date.strftime("%H:%M"),
+                "store": row.store_name,
+                "payment_method": row.payment_method or "N/A",
+                "location": row.location or "N/A"
+            })
+            history_map[date_key]["daily_total"] += amount
+
+        # Trả về danh sách đã sắp xếp theo ngày mới nhất lên đầu
+        sorted_history = sorted(history_map.values(), key=lambda x: x['date'], reverse=True)
+
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "total_period_amount": total_period_amount,
+            "history": sorted_history
+        }
+    
+    async def get_spending_comparison(self, user_id: int, target_date: date):
+        """
+        So sánh tổng chi tiêu tháng này với tháng trước
+        """
+        # 1. Xác định khoảng thời gian tháng hiện tại (Current Month)
+        curr_start = target_date.replace(day=1)
+        _, last_day_curr = calendar.monthrange(target_date.year, target_date.month)
+        curr_end = target_date.replace(day=last_day_curr)
+
+        # 2. Xác định khoảng thời gian tháng trước (Previous Month)
+        # Lấy ngày đầu tiên của tháng này trừ đi 1 ngày để ra tháng trước
+        prev_month_end = curr_start - timedelta(days=1)
+        prev_start = prev_month_end.replace(day=1)
+        
+        # 3. Hàm helper để tính tổng chi tiêu trong một khoảng thời gian
+        async def get_total_spent(start: date, end: date):
+            stmt = select(func.sum(Transaction.total_amount)).where(
+                and_(
+                    Transaction.user_id == user_id,
+                    Transaction.transaction_type == 'outflow',
+                    Transaction.transaction_date >= datetime.combine(start, datetime.min.time()),
+                    Transaction.transaction_date <= datetime.combine(end, datetime.max.time())
+                )
+            )
+            result = await self.db.execute(stmt)
+            return float(result.scalar() or 0)
+
+        # 4. Thực thi tính toán
+        current_total = await get_total_spent(curr_start, curr_end)
+        previous_total = await get_total_spent(prev_start, prev_month_end)
+
+        # 5. Tính toán tăng trưởng (%)
+        growth_rate = 0
+        if previous_total > 0:
+            growth_rate = round(((current_total - previous_total) / previous_total) * 100, 2)
+        elif current_total > 0:
+            growth_rate = 100.0  # Nếu tháng trước không tiêu gì mà tháng này tiêu thì coi như tăng 100%
+
+        return {
+            "current_month": {
+                "month": curr_start.month,
+                "year": curr_start.year,
+                "total": current_total
+            },
+            "previous_month": {
+                "month": prev_start.month,
+                "year": prev_start.year,
+                "total": previous_total
+            },
+            "growth_rate": growth_rate, # Dương là tăng, âm là giảm
+            "is_increased": growth_rate > 0
+        }
     
 async def get_budget_service(db: AsyncSession = Depends(get_db)):
     return BudgetService(db)

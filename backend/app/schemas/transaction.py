@@ -1,7 +1,7 @@
 # app/schemas/transaction.py
 from pydantic import BaseModel, HttpUrl, Field, field_validator
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 from decimal import Decimal
 from datetime import datetime
 
@@ -50,29 +50,37 @@ class TransactionType(str, Enum):
     EXPENSE = "outflow" # Khoản chi
 
 class TransactionCreateSchema(BaseModel):
-    # 1. Thông tin cơ bản từ UI
-    amount: Decimal = Field(..., gt=0, description="Số tiền phải lớn hơn 0")
-    type: TransactionType = Field(..., description="Loại giao dịch: INCOME hoặc EXPENSE")
+    # --- 1. Thông tin cốt lõi (Bảng Transaction) ---
+    amount: Decimal = Field(..., gt=0, description="Số tiền giao dịch")
+    type: TransactionType = Field(default=TransactionType.EXPENSE)
     transaction_date: datetime = Field(default_factory=datetime.now)
-    note: Optional[str] = Field(None, max_length=255, example="Ăn trưa cùng bạn")
-    
-    # 2. Thông tin liên kết (Foreign Keys trong CSDL)
-    category_id: int = Field(..., description="ID của danh mục (Ăn uống, Học tập...)")
-    group_id: Optional[int] = Field(None, description="Nếu là chi tiêu nhóm/phòng")
+    category_id: int = Field(..., description="ID danh mục chi tiêu")
+    group_id: Optional[int] = Field(None, description="ID nhóm nếu là chi tiêu chung")
 
-    # 3. Thông tin bổ sung (nếu có tải hóa đơn)
-    image_url: Optional[str] = None
-    
-    # Cấu hình để hiển thị ví dụ trong Swagger UI
+    # --- 2. Thông tin chi tiết (Bảng TransactionDetail) ---
+    note: Optional[str] = Field(None, max_length=500, description="Ghi chú chi tiết")
+    store_name: Optional[str] = Field(None, max_length=100, description="Tên cửa hàng (VinMart, Circle K...)")
+    payment_method: Optional[str] = Field(None, description="Tiền mặt, Chuyển khoản, Ví điện tử...")
+    location: Optional[str] = Field(None, description="Địa chỉ nơi tiêu tiền")
+
+    # --- 3. Thông tin Media & AI (Bảng TransactionMedia) ---
+    image_url: Optional[str] = Field(None, description="Link ảnh hóa đơn từ Cloud")
+    ocr_raw: Optional[dict[str, Any]] = Field(None, description="Dữ liệu thô từ AI quét hóa đơn")
+
     class Config:
         json_schema_extra = {
             "example": {
-                "amount": 50000.0,
+                "amount": 55000.0,
                 "type": "outflow",
-                "transaction_date": "2026-03-30T15:00:00",
-                "note": "Mua trà sữa",
+                "transaction_date": "2026-04-01T12:30:00",
                 "category_id": 1,
-                "group_id": None
+                "group_id": None,
+                "note": "Mua 1 bát phở và 1 trà đá",
+                "store_name": "Phở Thìn Lò Đúc",
+                "payment_method": "Chuyển khoản (Vietcombank)",
+                "location": "13 Lò Đúc, Hai Bà Trưng, Hà Nội",
+                "image_url": "https://storage.google.com/bills/2026/abc-123.jpg",
+                "ocr_raw": {"vendor": "Pho Thin", "total": 55000, "confidence": 0.98}
             }
         }
 class MediaSchema(BaseModel):
