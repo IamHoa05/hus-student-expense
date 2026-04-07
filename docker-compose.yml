@@ -13,6 +13,7 @@ services:
   backend:
     environment:
       - ENABLE_AI=false  # Khi nào cần test AI thì sửa thành true
+      - PYTHONDONTWRITEBYTECODE=1
     build: ./backend
     container_name: fastapi_app
     deploy:
