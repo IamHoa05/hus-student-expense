@@ -188,6 +188,16 @@ export default function LoginPage() {
                     className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
                   />
                 </div>
+
+                {/* THÊM MỚI: Link Quên mật khẩu */}
+                <div className="flex justify-end pt-1">
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-bold text-[#4b5b9a] hover:text-[#283775] hover:underline transition-all"
+                  >
+                    Quên mật khẩu?
+                  </Link>
+                </div>
               </div>
 
               <button
