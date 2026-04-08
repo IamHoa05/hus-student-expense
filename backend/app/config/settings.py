@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     OAUTH2_ACCESS_TOKEN_EXPIRE_MINUTES: int = 180
     OAUTH2_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
+    #GOOGLE AUTH API
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REDIRECT_URI: str
+
+    FRONTEND_URL: str = "http://localhost:3000"
     # Cấu hình Security
     SECRET_KEY: str 
 

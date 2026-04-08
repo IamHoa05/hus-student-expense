@@ -19,6 +19,8 @@ export default function BottomNavigation() {
     "/dashboard/goals/[Id]",
     "/notifications",
     "/register",
+    "/forgot-password",
+    "/verify",
   ];
 
   // Ẩn nếu URL nằm trong danh sách trên, HOẶC là trang chi tiết phân tích (ví dụ: /analytics/cat_food)

@@ -48,11 +48,83 @@ class AuthService:
         await self.db.commit()
         await self.db.refresh(new_user)
 
-        # Hoa có thể thêm Task gửi mail chào mừng ở đây
+        
         # send_welcome_email_task.delay(new_user.email, new_user.full_name)
 
         return {"message": "Đăng ký thành công", "user_id": new_user.user_id}
+    # --- YÊU CẦU ĐĂNG KÝ (GỬI OTP) ---
+    async def request_registration(self, payload: UserRegister, background_tasks: BackgroundTasks):
+        # 1. Kiểm tra xem email/phone đã bị chiếm chưa
+        if await self._identity_taken(payload.email, payload.phone):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email hoặc số điện thoại đã được sử dụng"
+            )
 
+        # 2. Tạo mã OTP (VD: 123456)
+        otp_code = create_otp() 
+        otp_hash = hash_password(otp_code)
+
+        # 3. Gửi mail chạy ngầm (Không làm đứng web của Hòa)
+        background_tasks.add_task(send_otp_email_sync, payload.email, payload.full_name, otp_code)
+
+        # 4. Tạo một Token tạm thời chứa thông tin người dùng và OTP đã mã hóa
+        # Token này sẽ hết hạn sau 5 phút
+        registration_token = create_access_token(
+            sub=payload.email,
+            role="user",
+            expires_minutes=5,
+            extra={
+                "type": "registration_waiting",
+                "otp_hash": otp_hash,
+                "user_data": {
+                    "full_name": payload.full_name,
+                    "phone": payload.phone,
+                    "password": hash_password(payload.password) # Lưu pass đã hash luôn cho an toàn
+                }
+            }
+        )
+
+        return {
+            "message": f"Mã xác thực đã được gửi đến {payload.email}",
+            "registration_token": registration_token
+        }
+    
+    # --- XÁC THỰC OTP VÀ HOÀN TẤT ĐĂNG KÝ ---
+    async def verify_registration_otp(self, otp: str, registration_token: str):
+        try:
+            # 1. Giải mã cái "vé chờ"
+            payload = decode_token(registration_token)
+            if payload.get("type") != "registration_waiting":
+                raise Exception()
+            
+            # 2. Kiểm tra mã OTP Hòa nhập có khớp với mã trong token không
+            if not verify_password(otp, payload.get("otp_hash")):
+                raise HTTPException(status_code=400, detail="Mã xác thực không chính xác")
+            
+        except:
+            raise HTTPException(status_code=400, detail="Phiên đăng ký đã hết hạn hoặc không hợp lệ")
+
+        # 3. OTP đúng -> Lấy dữ liệu người dùng từ token ra để lưu vào DB
+        user_info = payload.get("user_data")
+        new_user = User(
+            email=payload.get("sub"),
+            phone=user_info["phone"],
+            full_name=user_info["full_name"],
+            password=user_info["password"], # Đây là pass đã hash từ bước 1
+            is_active=True # Kích hoạt tài khoản luôn
+        )
+
+        try:
+            self.db.add(new_user)
+            await self.db.commit()
+            await self.db.refresh(new_user)
+            return {"message": "Đăng ký tài khoản thành công!", "user_id": new_user.user_id}
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail="Lỗi hệ thống khi lưu người dùng")
+        
+        
     # --- ĐĂNG NHẬP ---
     async def login_user(self, payload: UserLogin):
         stmt = select(User).where(User.email == payload.email)
@@ -100,13 +172,13 @@ class AuthService:
         if not user:
             raise HTTPException(status_code=404, detail="Email này chưa đăng ký tài khoản")
 
-        otp_code = create_otp() # VD: 123456
+        otp_code = create_otp() 
         otp_hash = hash_password(otp_code)
 
-        # THAY THẾ CELERY: Thêm hàm gửi mail vào hàng đợi chạy ngầm của FastAPI
+        # Gửi mail chạy ngầm
         background_tasks.add_task(send_otp_email_sync, email, user.full_name, otp_code)
 
-        # Tạo token chờ xác thực
+        # 1. PHẢI LÀ: reset_waiting (Đây là cái vé để đi vào cửa xác thực)
         reset_token = create_access_token(
             sub=email,
             role="user",
@@ -119,23 +191,42 @@ class AuthService:
     # --- XÁC THỰC OTP ---
     @staticmethod
     def verify_otp_for_reset(otp: str, reset_token: str):
-        # Logic tính toán thuần túy, giữ nguyên Sync
         try:
             payload = decode_token(reset_token)
-            if payload.get("type") != "reset_waiting": raise Exception()
-            if not verify_password(otp, payload.get("otp_hash")): raise Exception()
-        except:
-            raise HTTPException(status_code=400, detail="Mã OTP hoặc Token không hợp lệ")
+            token_type = payload.get("type")
+            
+            print(f"DEBUG: Đang xác thực Token loại: {token_type}")
+            
+            # 2. KIỂM TRA: Nếu Token đã là 'reset_allowed', nghĩa là đã xác thực rồi
+            if token_type == "reset_allowed":
+                return {"permission_token": reset_token} # Cho qua luôn nếu đã xong
 
-        # Trả về permission_token mới để ghi đè vào Cookie
-        permission_token = create_access_token(
-            sub=payload.get("sub"),
-            role=payload.get("role"),
-            expires_minutes=5,
-            extra={"type": "reset_allowed"}
-        )
-        return {"permission_token": permission_token}
-    
+            if token_type != "reset_waiting":
+                raise Exception(f"Loại Token {token_type} không được phép xác thực OTP")
+
+            input_otp = str(otp).strip()
+            stored_otp_hash = payload.get("otp_hash")
+
+            if not verify_password(input_otp, stored_otp_hash):
+                print(f"DEBUG: OTP không khớp! Input: {input_otp}")
+                raise Exception("OTP mismatch")
+
+            # 3. THÀNH CÔNG: Đổi sang loại 'reset_allowed' (Cái vé để vào cửa đổi pass)
+            permission_token = create_access_token(
+                sub=payload.get("sub"),
+                role=payload.get("role"),
+                expires_minutes=5,
+                extra={"type": "reset_allowed"}
+            )
+            return {"permission_token": permission_token}
+
+        except Exception as e:
+            print(f"❌ Lỗi xác thực: {str(e)}")
+            raise HTTPException(
+                status_code=400, 
+                detail="Mã OTP không chính xác hoặc phiên làm việc đã hết hạn"
+            )
+        
     # --- ĐỔI MẬT KHẨU CUỐI CÙNG ---
     async def reset_password_final(self, new_password: str, confirm_password: str, permission_token: str):
         if new_password != confirm_password:

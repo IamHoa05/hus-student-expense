@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function RegisterPage() {
   const router = useRouter();
 
@@ -21,51 +23,103 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  const [phone, setPhone] = useState(""); // Thêm dòng này để lưu số điện thoại
+
   // ==========================================
-  // HANDLER: BƯỚC 1 - GỬI THÔNG TIN VÀ NHẬN MÃ
+  // HANDLER: BƯỚC 1 - GỬI THÔNG TIN THẬT XUỐNG BACKEND
   // ==========================================
-  const handleRegisterInfo = (e: React.FormEvent) => {
+  const handleRegisterInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    // Kiểm tra rỗng
-    if (!name || !email || !dob || !password) {
+    // 1. Kiểm tra rỗng 
+    if (!name || !email || !phone || !password) {
       setErrorMsg("Vui lòng điền đầy đủ tất cả thông tin.");
       return;
     }
 
-    // Giả lập: Gọi API gửi email thành công -> Chuyển sang Bước 2
-    setSuccessMsg(`Mã xác nhận đã được gửi đến ${email}`);
-    setStep(2);
+    try {
+      // 2. GỌI API THẬT (Link xuống Backend Docker)
+      // NEXT_PUBLIC_API_URL đã cấu hình trong docker-compose là http://localhost:8000
+      const response = await fetch(`${API_URL}/auth/register`, {
+      method: "POST",
+      credentials: "include", // Đảm bảo Cookie (nếu Backend dùng session) được gửi đi
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        phone: phone,
+        password: password,
+        full_name: name 
+      }),
+    });
 
-    // Xóa thông báo màu xanh sau 3s cho đỡ vướng
-    setTimeout(() => setSuccessMsg(""), 3000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Nếu Backend trả về lỗi (ví dụ email đã tồn tại)
+        throw new Error(data.detail || "Đăng ký thất bại, vui lòng thử lại.");
+      }
+
+      // 3. THÀNH CÔNG: Chuyển sang Bước 2 (Nhập OTP)
+      setSuccessMsg(`Mã xác nhận đã được gửi đến ${email}`);
+      setStep(2);
+      
+      setTimeout(() => setSuccessMsg(""), 3000);
+
+    } catch (err: any) {
+      // Hiện lỗi đỏ nếu không kết nối được hoặc Backend báo lỗi
+      setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
+    }
   };
 
   // ==========================================
-  // HANDLER: BƯỚC 2 - XÁC NHẬN MÃ OTP
+  // HANDLER: BƯỚC 2 - GỌI API XÁC THỰC OTP THẬT
   // ==========================================
-  const handleVerifyOTP = (e: React.FormEvent) => {
+  const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
+    setSuccessMsg("");
 
+    // 1. Kiểm tra định dạng (Hòa đảm bảo biến otp là string 6 số nhé)
     if (otp.length < 6) {
       setErrorMsg("Vui lòng nhập đủ 6 số mã xác nhận.");
       return;
     }
 
-    // Giả lập: Nếu mã là "123456" thì cho qua, khác thì báo lỗi
-    if (otp !== "123456") {
-      setErrorMsg("Mã xác nhận không hợp lệ hoặc đã hết hạn. (Thử: 123456)");
-      return;
-    }
+    try {
+      // 2. GỌI API XÁC THỰC (Link xuống Backend)
+      // Lưu ý: fetch sẽ tự động đính kèm Cookie nếu Hòa để credentials: "include"
+      const response = await fetch(`${API_URL}/auth/verify-registration`, {
+        method: "POST",
+        credentials: "include", // Đảm bảo Cookie (nếu Backend dùng session) được gửi đi
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          otp: otp // Gửi 6 số người dùng nhập
+        }),
+      });
 
-    // Đăng ký hoàn tất
-    setSuccessMsg("Xác thực thành công! Đang chuyển về Đăng nhập...");
-    setTimeout(() => {
-      router.push("/login");
-    }, 2000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Nếu mã sai hoặc hết hạn (400, 422, 500...)
+        throw new Error(data.detail || "Mã xác nhận không chính xác hoặc đã hết hạn.");
+      }
+
+      // 3. THÀNH CÔNG: Chuyển trang
+      setSuccessMsg("Xác thực thành công! Tài khoản của Hòa đã được tạo.");
+      
+      setTimeout(() => {
+        router.push("/login"); // Chuyển về trang đăng nhập
+      }, 2000);
+
+    } catch (err: any) {
+      setErrorMsg(err.message || "Đã có lỗi xảy ra, vui lòng thử lại.");
+    }
   };
 
   return (
@@ -204,25 +258,25 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
-                  Ngày sinh
-                </label>
-                <div className="relative">
-                  {/* Thay type="text" thành type="date" */}
-                  <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    // Lớp ẩn icon lịch mặc định của Chrome/Safari (để dùng icon Material của bạn)
-                    className="w-full bg-[#e2e2e7]/50 border-none rounded-2xl pl-5 pr-12 py-4 text-[#1a1c1f] placeholder:text-[#767681] focus:ring-2 focus:ring-[#94a3e8] transition-all outline-none font-medium [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                  />
-                  {/* Icon Material của bạn nằm đè lên trên */}
-                  <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#4b5b9a] pointer-events-none">
-                    calendar_today
-                  </span>
-                </div>
+              
+  <div className="space-y-1.5">
+              <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
+                Số điện thoại
+              </label>
+              <div className="relative">
+                <input
+                  type="tel" // Đổi sang "tel" để bàn phím điện thoại hiện lên trên mobile
+                  value={phone} // Hòa nhớ đổi tên state tương ứng (ví dụ: const [phone, setPhone] = useState("");)
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} // Chỉ cho phép nhập số
+                  placeholder="09xx xxx xxx"
+                  className="w-full bg-[#e2e2e7]/50 border-none rounded-2xl pl-5 pr-12 py-4 text-[#1a1c1f] placeholder:text-[#767681] focus:ring-2 focus:ring-[#94a3e8] transition-all outline-none font-medium"
+                />
+                {/* Đổi icon từ lịch sang icon điện thoại */}
+                <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#4b5b9a] pointer-events-none">
+                  call
+                </span>
               </div>
+            </div>
 
               <div className="space-y-1.5">
                 <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
@@ -377,3 +431,6 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+
+

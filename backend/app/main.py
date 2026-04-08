@@ -1,38 +1,56 @@
 from fastapi import FastAPI
-from contextlib import asynccontextmanager # Thêm cái này để quản lý vòng đời app
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.config.database import engine, Base
 from app.config.settings import settings
+from starlette.middleware.sessions import SessionMiddleware
 
-# Import models (Giữ nguyên đống này của Hoa nhé)
+# Import models
 from app.models.user import User
 from app.models.group import Group, GroupMember
 from app.models.category import Category
 from app.models.transaction import Transaction, TransactionDetail, TransactionMedia, ExpenseSplit
 from app.models.financial import Budget, SavingGoal
 
-# 1. Định nghĩa hàm khởi tạo bảng
+# 1. Khởi tạo bảng
 async def init_models():
     async with engine.begin() as conn:
-        # Chạy hàm create_all (vốn là sync) trong môi trường async
         await conn.run_sync(Base.metadata.create_all)
 
-# 2. Dùng lifespan để chạy init_models khi app vừa bật lên
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Đang khởi tạo Database...")
     await init_models()
-    print("✅ Database đã sẵn sàng!")
     yield
-    # (Chỗ này để code dọn dẹp nếu cần khi tắt app)
 
-# 3. Khởi tạo App với lifespan
+# 2. Khởi tạo App DUY NHẤT MỘT LẦN
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
-    lifespan=lifespan # Truyền lifespan vào đây
+    lifespan=lifespan
 )
 
+import os
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=settings.SECRET_KEY,
+    session_cookie="momentum_session",
+    same_site="lax",   # BẮT BUỘC: Cho phép gửi cookie giữa các port localhost
+    https_only=False   # BẮT BUỘC: Vì Hòa đang dùng http thường
+)
+
+# 3. Cấu hình CORS (Phải có để Frontend gọi được)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 4. CẮM CÁC ROUTER (Link các chức năng vào đây)
 from .controllers.auth_controller import router as auth_router
 app.include_router(auth_router)
 

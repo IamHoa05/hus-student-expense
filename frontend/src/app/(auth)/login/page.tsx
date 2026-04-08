@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -17,26 +19,52 @@ export default function LoginPage() {
     setErrorMsg("");
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
 
+    // 1. Kiểm tra rỗng
     if (!email || !password) {
       setErrorMsg("Vui lòng điền đầy đủ email và mật khẩu.");
       return;
     }
 
-    if (password !== "123456") {
-      setErrorMsg("Mật khẩu không chính xác hoặc tài khoản không tồn tại.");
-      return;
-    }
+    try {
+      // 2. GỌI API LOGIN
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        credentials: "include", // <--- CỰC KỲ QUAN TRỌNG để trình duyệt nhận Cookie Token
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+        }),
+      });
 
-    router.push("/dashboard");
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Nếu sai pass hoặc user không tồn tại (401, 404 từ Backend)
+        throw new Error(data.detail || "Đăng nhập thất bại.");
+      }
+
+      // 3. THÀNH CÔNG: Lưu thông tin cơ bản (tùy chọn) và chuyển trang
+      // Backend của Hòa đã tự set set_auth_cookies rồi nên không cần lưu token thủ công
+      console.log("Đăng nhập thành công:", data);
+      
+      router.push("/dashboard");
+
+    } catch (err: any) {
+      setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
+    }
   };
 
   const handleGoogleLogin = () => {
-    router.push("/dashboard");
-  };
+  // Chuyển hướng trình duyệt thẳng tới API của Backend
+  window.location.href = `${API_URL}/auth/google/login?next=/dashboard`;
+};
 
   return (
     // 1. Loại bỏ các class chia cột flex-row, giữ lại flex-col và căn giữa tuyệt đối
@@ -188,6 +216,16 @@ export default function LoginPage() {
                     className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
                   />
                 </div>
+                 {/* THÊM MỚI: Link Quên mật khẩu */}
+                <div className="flex justify-end pt-1">
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-bold text-[#4b5b9a] hover:text-[#283775] hover:underline transition-all"
+                  >
+                    Quên mật khẩu?
+                  </Link>
+                </div>
+                
               </div>
 
               <button
