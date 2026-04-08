@@ -1,5 +1,6 @@
 import "./globals.css";
 import BottomNavigation from "@/components/layout/BottomNavigation";
+import { Toaster } from "sonner";
 
 export const metadata = {
   title: "Momentum",
@@ -27,6 +28,7 @@ export default function RootLayout({
         <div className="w-full max-w-md bg-[#f9f9fe] min-h-screen relative shadow-2xl overflow-x-hidden">
           {children}
           {/*Thanh điều hướng */}
+          <Toaster position="top-center" richColors />
           <BottomNavigation />
         </div>
       </body>

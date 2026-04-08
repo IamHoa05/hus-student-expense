@@ -194,8 +194,9 @@ export default function AddContributionPage() {
                 value={formatNumber(contribution)}
                 onChange={handleAmountChange}
                 placeholder="0"
-                className="w-full bg-transparent border-none py-5 px-6 text-3xl font-extrabold font-headline text-[#1a1c1f] focus:ring-0 placeholder:text-[#c6c5d1]"
+                className="w-full bg-transparent border-none py-5 px-6 text-3xl font-extrabold font-headline text-[#1a1c1f] focus: outline-none placeholder:text-[#c6c5d1]"
               />
+
               <span className="absolute right-6 text-xl font-bold text-[#4b5b9a]">
                 VND
               </span>

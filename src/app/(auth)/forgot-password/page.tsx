@@ -17,99 +17,96 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen flex flex-col overflow-x-hidden">
-      {/* Header / TopAppBar */}
-      <header className="w-full top-0 sticky z-50 bg-[#f9f9fe]/90 backdrop-blur-md flex items-center px-6 h-16">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="text-[#94a3e8] hover:opacity-80 transition-opacity active:scale-95"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-          </button>
-          <h1 className="text-[#94a3e8] font-headline font-bold text-lg">
-            Quên mật khẩu
-          </h1>
-        </div>
-      </header>
+    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen flex flex-col relative overflow-x-hidden">
+      {/* Background Organic Ornaments */}
+      <div className="absolute top-0 -right-20 w-80 h-80 bg-[#94a3e8]/20 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10 pointer-events-none"></div>
+      <div className="absolute top-1/2 -left-32 w-64 h-64 bg-[#e0e2f1]/30 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10 pointer-events-none"></div>
 
-      <main className="flex-grow flex items-center justify-center px-6 py-12 relative overflow-hidden">
-        {/* Background Fluid Elements */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#94a3e8]/10 rounded-[60%_40%_30%_70%/60%_30%_70%_40%] blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-[#e0e2f1]/20 rounded-[60%_40%_30%_70%/60%_30%_70%_40%] blur-3xl pointer-events-none"></div>
+      {/* TopAppBar (Mũi tên quay lại góc trái) */}
+      <nav className="w-full max-w-md mx-auto top-0 sticky bg-[#f9f9fe]/90 backdrop-blur flex items-center px-6 py-4 z-50">
+        <button
+          onClick={() => router.back()}
+          className="text-[#94a3e8] hover:text-[#4b5b9a] transition-colors active:scale-95 duration-200"
+        >
+          <span className="material-symbols-outlined text-2xl">arrow_back</span>
+        </button>
+        <h1 className="font-headline font-bold text-lg ml-4 text-[#94a3e8]">
+          Quên mật khẩu
+        </h1>
+      </nav>
 
-        <div className="w-full max-w-md z-10">
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-md mx-auto px-6 pb-12 flex flex-col justify-center relative z-10">
+        <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
           {/* Hero Branding Section */}
-          <div className="mb-12 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 mb-8 bg-[#f3f3f8] rounded-xl relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] opacity-10 rounded-xl"></div>
+          <div className="mb-10 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-6 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] rounded-2xl shadow-lg shadow-[#4b5b9a]/20">
               <span
-                className="material-symbols-outlined text-[#4b5b9a] text-5xl"
+                className="material-symbols-outlined text-white text-4xl"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 lock_reset
               </span>
             </div>
-            <h2 className="font-headline text-4xl font-extrabold text-[#4b5b9a] tracking-tight mb-4">
-              Quên mật khẩu
+            <h2 className="font-headline text-3xl font-extrabold text-[#4b5b9a] tracking-tight mb-3">
+              Khôi phục quyền truy cập
             </h2>
-            <p className="text-[#454650] text-lg leading-relaxed max-w-xs mx-auto">
-              Nhập email của bạn để nhận hướng dẫn đặt lại mật khẩu.
+            <p className="text-[#616470] text-sm font-medium leading-relaxed max-w-xs mx-auto">
+              Đừng lo lắng! Hãy nhập email của bạn để nhận hướng dẫn đặt lại mật
+              khẩu.
             </p>
           </div>
 
-          {/* Forgot Password Card */}
-          <div className="bg-white rounded-[2rem] p-8 shadow-[0_20px_40px_rgba(75,91,154,0.08)]">
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Input Field Group */}
-              <div className="space-y-3">
+          {/* Form Card (Bo khung vuông vắn) */}
+          <div className="bg-white p-6 rounded-2xl border border-[#e2e2e7] shadow-sm space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Input Field */}
+              <div className="space-y-1.5">
                 <label
-                  className="font-headline font-bold text-sm text-[#4b5b9a] ml-1 block"
+                  className="block text-xs font-bold uppercase tracking-widest text-[#616470] ml-1"
                   htmlFor="email"
                 >
-                  Địa chỉ Email
+                  Email xác thực
                 </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-[#767681] group-focus-within:text-[#4b5b9a] transition-colors">
-                    <span className="material-symbols-outlined text-xl">
-                      mail
-                    </span>
-                  </div>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-xl">
+                    mail
+                  </span>
                   <input
                     id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@university.edu"
-                    className="w-full h-14 pl-12 pr-4 bg-[#e2e2e7]/40 rounded-full border-none focus:ring-2 focus:ring-[#4b5b9a]/40 focus:bg-white transition-all font-medium text-[#1a1c1f] placeholder:text-[#767681]/60"
+                    placeholder="momentum@edu.vn"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
                   />
                 </div>
               </div>
 
-              {/* Main Action */}
-              <div className="space-y-6">
+              {/* Main Actions */}
+              <div className="space-y-4">
                 <button
                   type="submit"
-                  className="w-full h-14 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white font-headline font-bold rounded-full shadow-lg hover:shadow-[#4b5b9a]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-[#dde1ff] text-[#283775] hover:bg-[#94a3e8] hover:text-white transition-all duration-300 py-3.5 rounded-xl font-headline font-bold text-base shadow-sm active:scale-95 flex items-center justify-center gap-2 mt-2"
                 >
                   <span>Gửi mã xác nhận</span>
-                  <span className="material-symbols-outlined text-xl">
+                  <span className="material-symbols-outlined text-lg">
                     send
                   </span>
                 </button>
 
-                <div className="flex items-center justify-center">
-                  <div className="h-[1px] flex-grow bg-[#e2e2e7]"></div>
-                  <span className="px-4 text-xs font-bold text-[#767681] uppercase tracking-widest">
+                <div className="flex items-center justify-center my-4">
+                  <div className="h-[1px] flex-grow bg-[#c6c5d1]/30"></div>
+                  <span className="px-4 text-[10px] font-bold text-[#616470] uppercase tracking-widest">
                     Hoặc
                   </span>
-                  <div className="h-[1px] flex-grow bg-[#e2e2e7]"></div>
+                  <div className="h-[1px] flex-grow bg-[#c6c5d1]/30"></div>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => router.push("/login")}
-                  className="w-full h-14 bg-[#e0e2f1] text-[#4b5b9a] font-headline font-bold rounded-full hover:bg-[#4b5b9a]/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  className="w-full border-2 border-[#e2e2e7] text-[#454650] hover:bg-[#f3f3f8] transition-colors duration-300 py-3.5 rounded-xl font-headline font-bold flex items-center justify-center gap-2 active:scale-95"
                 >
                   <span className="material-symbols-outlined text-xl">
                     arrow_back_ios_new
@@ -119,6 +116,16 @@ export default function ForgotPasswordPage() {
               </div>
             </form>
           </div>
+
+          {/* Context Links */}
+          {/* <div className="mt-10 text-center">
+            <p className="text-xs text-[#616470] font-medium mb-1">
+              Gặp khó khăn khi nhận mã?
+            </p>
+            <button className="text-xs font-bold text-[#4b5b9a] hover:text-[#283775] transition-colors">
+              Liên hệ bộ phận hỗ trợ
+            </button>
+          </div> */}
         </div>
       </main>
     </div>

@@ -168,8 +168,6 @@ export default function ProfilePage() {
                   </span>
                 </div>
               </div>
-
-              {/* Nút photo_camera đã bị xóa để không cho thay đổi avatar */}
             </div>
 
             {/* Thông tin cố định */}
@@ -198,7 +196,7 @@ export default function ProfilePage() {
                     onChange={(e) =>
                       setEditProfile({ ...editProfile, name: e.target.value })
                     }
-                    className="w-full bg-[#f3f3f8] border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold text-[#1a1c1f] focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all"
+                    className="w-full bg-[#f3f3f8] border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold text-[#1a1c1f] focus:outline-none"
                   />
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-lg">
                     person
@@ -229,7 +227,7 @@ export default function ProfilePage() {
                       setEditProfile({ ...editProfile, userId: e.target.value })
                     }
                     disabled={profile.hasChangedId}
-                    className={`w-full border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all ${
+                    className={`w-full border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold focus:focus:outline-none ${
                       profile.hasChangedId
                         ? "bg-[#e2e2e7]/50 text-[#767681] opacity-70"
                         : "bg-[#f3f3f8] text-[#1a1c1f]"
@@ -338,7 +336,7 @@ export default function ProfilePage() {
                           onChange={(e) =>
                             handleBudgetChange(budget.id, e.target.value)
                           }
-                          className="w-24 text-right bg-transparent border-none focus:ring-0 font-headline font-bold p-0 text-[#1a1c1f] text-sm"
+                          className="w-24 text-right bg-transparent border-none focus:outline-none font-headline font-bold p-0 text-[#1a1c1f] text-sm"
                         />
                         <span className="text-sm font-bold text-[#767681]">
                           đ

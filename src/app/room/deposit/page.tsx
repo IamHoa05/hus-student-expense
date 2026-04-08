@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
-// Giả lập dữ liệu ví cá nhân hiện tại
 const MY_PERSONAL_WALLET = {
-  balance: 15000000, // 15 triệu
+  balance: 15000000,
 };
 
 const MOCK_GROUPS = [
@@ -27,44 +27,55 @@ const formatNumber = (numStr: string) => {
 export default function DepositFundPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const groupId = searchParams.get("id") || "g1";
+
   const groupData = useMemo(
     () => MOCK_GROUPS.find((g) => g.id === groupId) || MOCK_GROUPS[0],
     [groupId]
   );
+
+  const [amount, setAmount] = useState<string>("");
+  const [note, setNote] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
   const handleQuickSelect = (value: number) => {
     setAmount(value.toString());
   };
 
-  const [amount, setAmount] = useState<string>("");
-  const [note, setNote] = useState<string>("");
+  const handleConfirm = async () => {
+    if (loading) return;
 
-  const handleConfirm = () => {
     const depositAmount = parseInt(amount.replace(/\D/g, ""), 10);
 
     if (!depositAmount || depositAmount <= 0) {
-      alert("Vui lòng nhập số tiền hợp lệ!");
+      toast.error("Vui lòng nhập số tiền hợp lệ!");
       return;
     }
 
     if (depositAmount > MY_PERSONAL_WALLET.balance) {
-      alert("Số dư ví cá nhân không đủ để thực hiện nạp quỹ!");
+      toast.error("Số dư không đủ!");
       return;
     }
 
-    // --- LOGIC XỬ LÝ (Sẽ thay bằng gọi API sau này) ---
-    // 1. Trừ tiền ví cá nhân: MY_PERSONAL_WALLET.balance - depositAmount
-    // 2. Tạo Transaction cá nhân: { title: `Đóng quỹ ${groupData.name}`, type: 'expense', amount: depositAmount }
-    // 3. Cộng tiền quỹ nhóm: groupData.balance + depositAmount
-    // 4. Tạo Transaction nhóm: { title: 'Thành viên nạp quỹ', type: 'deposit', amount: depositAmount }
+    try {
+      setLoading(true);
 
-    alert(
-      `Giao dịch thành công!\n` +
-        `- Đã trừ ${formatNumber(amount)}đ từ ví cá nhân.\n` +
-        `- Đã cộng vào quỹ nhóm: ${groupData.name}.`
-    );
+      // 👉 Giả lập call API
+      await new Promise((res) => setTimeout(res, 1200));
 
-    router.push("/room");
+      toast.success(
+        `Nạp ${formatNumber(amount)}đ vào "${groupData.name}" thành công 🎉`
+      );
+
+      setTimeout(() => {
+        router.push("/room");
+      }, 1200);
+    } catch (err) {
+      toast.error("Giao dịch thất bại, thử lại!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -73,7 +84,7 @@ export default function DepositFundPage() {
       <header className="sticky top-0 z-50 bg-[#f9f9fe]/90 backdrop-blur-xl flex items-center px-6 py-4 w-full max-w-md mx-auto border-b border-[#e2e2e7]/30">
         <button
           onClick={() => router.back()}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#d1f4e0] text-[#059669]"
+          className="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-[#d1f4e0] text-[#059669]"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -83,7 +94,7 @@ export default function DepositFundPage() {
       </header>
 
       <div className="pt-8 px-6 max-w-md mx-auto space-y-8">
-        {/* Thông tin ví cá nhân trước khi nạp */}
+        {/* Wallet */}
         <div className="bg-white p-4 rounded-2xl border border-[#e2e2e7] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#f3f3f8] rounded-full flex items-center justify-center text-[#4b5b9a]">
@@ -100,9 +111,11 @@ export default function DepositFundPage() {
               </p>
             </div>
           </div>
+
           <span className="material-symbols-outlined text-[#c6c5d1]">
             arrow_forward
           </span>
+
           <div className="text-right">
             <p className="text-[10px] font-black text-[#059669] uppercase">
               Nạp vào quỹ
@@ -111,18 +124,19 @@ export default function DepositFundPage() {
           </div>
         </div>
 
-        {/* Input Số tiền */}
+        {/* Input */}
         <section className="space-y-4">
-          <div className="relative">
+          <div>
             <p className="text-[10px] font-black uppercase text-[#059669] ml-1 mb-2">
               Số tiền muốn nạp
             </p>
+
             <input
               type="text"
               value={formatNumber(amount)}
               onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
               placeholder="0"
-              className="w-full bg-white border border-[#e2e2e7] rounded-[2rem] px-8 py-6 text-4xl font-headline font-black focus:border-[#059669] transition-all text-[#1a1c1f]"
+              className="w-full bg-white border border-[#e2e2e7] rounded-2xl px-8 py-6 text-4xl font-headline font-black focus:outline-none"
             />
           </div>
 
@@ -139,33 +153,40 @@ export default function DepositFundPage() {
           </div>
         </section>
 
-        {/* Ghi chú */}
+        {/* Note */}
         <section className="space-y-3">
           <label className="block font-black text-[10px] uppercase text-[#767681] ml-1">
-            Lời nhắn (Ghi chú)
+            Lời nhắn
           </label>
-          <div className="flex items-center bg-white border border-[#e2e2e7] rounded-2xl p-4 gap-3 focus-within:border-[#059669] transition-all">
+
+          <div className="flex items-center bg-white border border-[#e2e2e7] rounded-2xl p-4 gap-3">
             <span className="material-symbols-outlined text-[#059669]">
               chat
             </span>
+
             <input
               type="text"
               placeholder="Ví dụ: Tiền quỹ tháng 4..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-medium"
+              className="w-full bg-transparent outline-none text-sm"
             />
           </div>
         </section>
       </div>
 
-      {/* Button xác nhận */}
-      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#f9f9fe] via-[#f9f9fe] to-transparent z-40 flex justify-center">
+      {/* Button */}
+      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#f9f9fe] to-transparent flex justify-center">
         <button
           onClick={handleConfirm}
-          className="w-full max-w-md py-5 rounded-[2rem] bg-gradient-to-r from-[#059669] to-[#34d399] text-white font-headline font-black text-lg shadow-xl shadow-[#059669]/30 active:scale-[0.98] transition-all"
+          disabled={loading}
+          className={`w-full max-w-md py-5 rounded-full text-white font-bold text-lg transition-all ${
+            loading
+              ? "bg-gray-400"
+              : "bg-gradient-to-r from-[#059669] to-[#34d399] active:scale-[0.98]"
+          }`}
         >
-          Xác nhận chuyển vào quỹ
+          {loading ? "Đang xử lý..." : "Xác nhận"}
         </button>
       </div>
     </main>

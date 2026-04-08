@@ -70,7 +70,7 @@ export default function CreateGroupPage() {
                 placeholder="Ví dụ: Phòng 402, Team Phượt..."
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                className="w-full bg-white border border-[#e2e2e7] rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all placeholder:font-medium"
+                className="w-full bg-white border border-[#e2e2e7] rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:outline-none focus:ring-[#4b5b9a]/30 transition-all placeholder:font-medium"
               />
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#c6c5d1] group-focus-within:text-[#4b5b9a]">
                 label
@@ -117,7 +117,7 @@ export default function CreateGroupPage() {
                 placeholder="0"
                 value={initialBalance}
                 onChange={(e) => setInitialBalance(e.target.value)}
-                className="w-full bg-transparent border-none p-0 text-3xl font-headline font-black text-[#1a1c1f] focus:ring-0 placeholder:text-[#e2e2e7]"
+                className="w-full bg-transparent border-none p-0 text-3xl font-headline font-black text-[#1a1c1f] focus:outline-none placeholder:text-[#e2e2e7]"
               />
             </div>
             <p className="text-[9px] text-[#767681] italic">

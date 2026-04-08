@@ -196,7 +196,7 @@ export default function CategoryDetailPage() {
                 search
               </span>
               <input
-                className="w-full bg-[#e2e2e7] border-none rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all"
+                className="w-full bg-[#e2e2e7] border-none rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:outline-none"
                 placeholder="Tìm trong hạng mục..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

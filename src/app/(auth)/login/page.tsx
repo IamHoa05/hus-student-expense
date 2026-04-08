@@ -163,7 +163,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="momentum@edu.vn"
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none outline-none focus:text-[#1a1c1f] transition-all"
                   />
                 </div>
               </div>
@@ -185,7 +185,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none outline-none focus:text-[#1a1c1f] transition-all"
                   />
                 </div>
 

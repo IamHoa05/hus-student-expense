@@ -219,7 +219,7 @@ export default function AddTransactionPage() {
                         onChange={(e) =>
                           updateProduct(p.id, "name", e.target.value)
                         }
-                        className="flex-grow bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-[#1a1c1f]"
+                        className="flex-grow bg-transparent border-none p-0 focus:outline-none text-sm font-bold text-[#1a1c1f]"
                       />
                       <button
                         onClick={() => removeProduct(p.id)}
@@ -254,7 +254,7 @@ export default function AddTransactionPage() {
                               parseInt(e.target.value)
                             )
                           }
-                          className="w-20 text-right bg-transparent border-none p-0 text-sm font-black text-[#4b5b9a] focus:ring-0"
+                          className="w-20 text-right bg-transparent border-none p-0 text-sm font-black text-[#4b5b9a] focus:outline-none"
                         />
                         <span className="text-[10px] font-bold text-[#4b5b9a]">
                           đ
@@ -300,10 +300,10 @@ export default function AddTransactionPage() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Tên hạng mục khác (sẽ tự động lưu lại...)"
+                  placeholder="Tên hạng mục khác"
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#f3f3f8] rounded-xl border-none text-[10px] font-bold focus:ring-1 focus:ring-[#4b5b9a] placeholder:italic"
+                  className="w-full px-4 py-3 bg-[#f3f3f8] rounded-xl border-none text-[10px] font-bold focus:outline-none focus:ring-[#4b5b9a] placeholder:italic"
                 />
               </div>
             </section>
@@ -325,7 +325,7 @@ export default function AddTransactionPage() {
                     <select
                       value={selectedGroupId}
                       onChange={(e) => setSelectedGroupId(e.target.value)}
-                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#1a1c1f] focus:ring-0 appearance-none"
+                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#1a1c1f] focus:outline-none appearance-none"
                     >
                       {MOCK_GROUPS.map((g) => (
                         <option key={g.id} value={g.id}>
@@ -393,7 +393,7 @@ export default function AddTransactionPage() {
                 <input
                   type="number"
                   placeholder="0"
-                  className="w-full bg-transparent border-none p-0 text-5xl font-headline font-black text-[#1a1c1f] focus:ring-0 placeholder:text-[#e2e2e7]"
+                  className="w-full bg-transparent border-none p-0 text-5xl font-headline font-black text-[#1a1c1f] focus:outline-none placeholder:text-[#e2e2e7]"
                   onChange={(e) =>
                     setProducts([
                       {
@@ -426,7 +426,7 @@ export default function AddTransactionPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="bg-transparent border-none p-0 text-sm font-bold flex-grow focus:ring-0 text-[#1a1c1f]"
+              className="bg-transparent border-none p-0 text-sm font-bold flex-grow focus:outline-none text-[#1a1c1f]"
             />
           </div>
           <div className="flex items-center bg-white p-4 rounded-2xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
@@ -444,7 +444,7 @@ export default function AddTransactionPage() {
               placeholder="Ghi chú thêm..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="bg-transparent border-none p-0 text-sm font-medium flex-grow focus:ring-0 text-[#1a1c1f] placeholder:text-[#c6c5d1]"
+              className="bg-transparent border-none p-0 text-sm font-medium flex-grow focus:outline-none text-[#1a1c1f] placeholder:text-[#c6c5d1]"
             />
           </div>
         </section>

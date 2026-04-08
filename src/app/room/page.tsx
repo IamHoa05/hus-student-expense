@@ -172,7 +172,7 @@ export default function RoomFundPage() {
           </div>
 
           {/* CARD QUỸ & ACTION */}
-          <section className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] p-8 text-white shadow-xl shadow-[#4b5b9a]/20 italic">
+          <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] p-8 text-white shadow-xl shadow-[#4b5b9a]/20 italic">
             <div className="relative z-10 flex flex-col items-center text-center">
               <span className="text-white/70 font-black tracking-[0.2em] uppercase text-[10px] mb-2">
                 Số dư hiện tại
@@ -198,17 +198,17 @@ export default function RoomFundPage() {
           </section>
 
           {/* TÌM KIẾM THÀNH VIÊN */}
-          <section className="bg-white p-6 rounded-3xl border border-[#e2e2e7]/50 shadow-sm space-y-4">
+          <section className="bg-white p-6 rounded-2xl border border-[#e2e2e7]/50 shadow-sm space-y-4">
             <h3 className="font-headline font-bold text-sm text-[#4b5b9a] uppercase tracking-widest">
               Thêm thành viên
             </h3>
             <div className="relative">
               <input
                 type="text"
-                placeholder="Nhập ID (u789 để test)..."
+                placeholder="Nhập ID"
                 value={searchMemberId}
                 onChange={(e) => setSearchMemberId(e.target.value)}
-                className="w-full bg-[#f3f3f8] border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all"
+                className="w-full bg-[#f3f3f8] border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-medium focus:outline-none focus:ring-[#4b5b9a]/30 transition-all"
               />
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
                 person_search
@@ -318,7 +318,7 @@ export default function RoomFundPage() {
                 search
               </span>
               <input
-                className="w-full bg-[#e2e2e7] border-none rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all"
+                className="w-full bg-[#e2e2e7] border-none rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none focus:ring-[#4b5b9a]/30 transition-all"
                 placeholder="Tìm giao dịch trong nhóm..."
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
