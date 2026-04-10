@@ -13,9 +13,9 @@ interface Transaction {
   title: string;
   amount: number;
   type: "income" | "expense";
-  date: string; // Hiển thị ngày cụ thể (VD: 15/10)
-  time: string; // Hiển thị giờ (VD: 09:00)
-  monthGroup: string; // Dùng để gom nhóm Header (VD: Tháng 10)
+  date: string;
+  time: string;
+  monthGroup: string;
   icon: string;
   category: string;
   isScanned: boolean;
@@ -40,8 +40,16 @@ interface InvoiceItem {
   cat: string;
 }
 
+// Lấy tháng hiện tại để tính chi tiêu
+const getCurrentMonthGroup = () => {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  return `Tháng ${month.toString().padStart(2, "0")}/${year}`;
+};
+
 // =======================================================================
-// 2. BỘ DỮ LIỆU ẢO (MOCK DATA) - Đã tách rõ Ngày và Tháng Gom Nhóm
+// 2. BỘ DỮ LIỆU ẢO (MOCK DATA)
 // =======================================================================
 const MOCK_TRANSACTIONS: Transaction[] = [
   {
@@ -181,12 +189,38 @@ export default function TransactionsPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<ScannedInvoice | null>(
     null
   );
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // =======================================================================
   // LOGIC: STATE QUẢN LÝ DANH SÁCH MÓN HÀNG TRONG MODAL & LƯU TRỮ
   // =======================================================================
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Xử lý bàn phím ảo
+  useEffect(() => {
+    const handleResize = () => {
+      const isKeyboard = window.visualViewport
+        ? window.visualViewport.height < window.innerHeight * 0.8
+        : window.innerHeight < 700;
+
+      setIsKeyboardVisible(isKeyboard);
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleResize);
+    } else {
+      window.addEventListener("resize", handleResize);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", handleResize);
+      } else {
+        window.removeEventListener("resize", handleResize);
+      }
+    };
+  }, []);
 
   const handleOpenInvoice = (inv: ScannedInvoice) => {
     setSelectedInvoice(inv);
@@ -242,25 +276,56 @@ export default function TransactionsPage() {
   }, [activeTab, searchQuery, priceSort]);
 
   // =======================================================================
-  // LOGIC: TÍNH TỔNG CHI TIÊU & XU HƯỚNG TỰ ĐỘNG
+  // LOGIC: TÍNH CHI TIÊU THÁNG HIỆN TẠI (Giống Dashboard)
   // =======================================================================
-  const totalExpense = useMemo(() => {
-    return MOCK_TRANSACTIONS.filter((tx) => tx.type === "expense").reduce(
-      (sum, tx) => sum + tx.amount,
-      0
-    );
-  }, []);
+  const currentMonthGroup = getCurrentMonthGroup();
 
+  const currentMonthExpense = useMemo(() => {
+    return MOCK_TRANSACTIONS.filter(
+      (tx) => tx.type === "expense" && tx.monthGroup === currentMonthGroup
+    ).reduce((sum, tx) => sum + tx.amount, 0);
+  }, [currentMonthGroup]);
+
+  // Tính trend so với tháng trước
   const trend = useMemo(() => {
-    const lastMonthExpense = 0;
-    if (lastMonthExpense === 0 && totalExpense === 0) return 0;
-    if (lastMonthExpense === 0 && totalExpense > 0) return 100;
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthGroup = `Tháng ${(lastMonth.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}/${lastMonth.getFullYear()}`;
+
+    const lastMonthExpense = MOCK_TRANSACTIONS.filter(
+      (tx) => tx.type === "expense" && tx.monthGroup === lastMonthGroup
+    ).reduce((sum, tx) => sum + tx.amount, 0);
+
+    if (lastMonthExpense === 0 && currentMonthExpense === 0) return 0;
+    if (lastMonthExpense === 0 && currentMonthExpense > 0) return 100;
     const percentage =
-      ((totalExpense - lastMonthExpense) / lastMonthExpense) * 100;
+      ((currentMonthExpense - lastMonthExpense) / lastMonthExpense) * 100;
     return Math.round(percentage);
-  }, [totalExpense]);
+  }, [currentMonthExpense]);
 
   const isExpenseUp = trend > 0;
+
+  // Lấy tên tháng hiện tại để hiển thị
+  const getCurrentMonthName = () => {
+    const months = [
+      "Tháng 1",
+      "Tháng 2",
+      "Tháng 3",
+      "Tháng 4",
+      "Tháng 5",
+      "Tháng 6",
+      "Tháng 7",
+      "Tháng 8",
+      "Tháng 9",
+      "Tháng 10",
+      "Tháng 11",
+      "Tháng 12",
+    ];
+    const currentDate = new Date();
+    return months[currentDate.getMonth()];
+  };
 
   // =======================================================================
   // LOGIC: BỘ LỌC VÀ TÌM KIẾM
@@ -280,7 +345,6 @@ export default function TransactionsPage() {
     return result;
   }, [searchQuery, priceSort]);
 
-  // Gom nhóm dữ liệu dựa trên monthGroup
   const groupedTransactions = useMemo(() => {
     return groupDataByMonthGroup(filteredTransactions.slice(0, displayLimitTx));
   }, [filteredTransactions, displayLimitTx]);
@@ -296,29 +360,31 @@ export default function TransactionsPage() {
   };
 
   return (
+    // ĐỔI px-6 THÀNH px-5 ĐỂ ĐỒNG BỘ VỚI PROFILE
     <main className="w-full max-w-md mx-auto h-screen flex flex-col bg-[#f9f9fe] overflow-hidden">
-      <div className="px-6 pt-4 shrink-0 bg-[#f9f9fe] z-50">
+      <div className="px-5 pt-4 shrink-0 bg-[#f9f9fe] z-50">
         <TopBar />
       </div>
 
-      <div className="flex-grow overflow-y-auto px-6 pb-32 scrollbar-hide">
-        <div className="space-y-6 pt-2 pb-6">
+      <div className="flex-grow overflow-y-auto px-5 pb-32 scrollbar-hide">
+        <div className="space-y-5 pt-2 pb-6">
           <section>
-            <h2 className="font-headline text-4xl font-extrabold text-[#4b5b9a] tracking-tight mb-2">
+            <h2 className="font-headline text-3xl font-extrabold text-[#4b5b9a] tracking-tight mb-2">
               Lịch sử giao dịch
             </h2>
-            <p className="text-[#616470] font-medium text-sm">
+            <p className="text-[#616470] font-medium text-xs">
               Quản lý chi tiêu khoa học
             </p>
           </section>
 
+          {/* Search và Filter - Thu gọn */}
           <div className="flex gap-2">
             <div className="relative flex-grow">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#4b5b9a] text-lg">
                 search
               </span>
               <input
-                className="w-full bg-[#e2e2e7] border-none rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none outline-none"
+                className="w-full bg-[#e2e2e7] border-none rounded-xl py-3 pl-10 pr-3 text-sm focus:outline-none outline-none"
                 placeholder="Tìm giao dịch..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -326,34 +392,35 @@ export default function TransactionsPage() {
             </div>
             <button
               onClick={togglePriceSort}
-              className={`px-4 rounded-2xl flex flex-col items-center justify-center border transition-all focus:outline-none outline-none ${
+              className={`px-3 rounded-xl flex flex-col items-center justify-center border transition-all focus:outline-none outline-none ${
                 priceSort !== "none"
                   ? "bg-[#4b5b9a] text-white border-transparent shadow-md"
                   : "bg-white text-[#767681] border-[#e2e2e7]"
               }`}
             >
-              <span className="material-symbols-outlined text-xl">
+              <span className="material-symbols-outlined text-lg">
                 {priceSort === "none" ? "filter_list" : "swap_vert"}
               </span>
               {priceSort !== "none" && (
-                <span className="text-[8px] font-black uppercase mt-0.5">
+                <span className="text-[7px] font-black uppercase mt-0.5">
                   {priceSort === "desc" ? "Cao" : "Thấp"}
                 </span>
               )}
             </button>
           </div>
 
-          <section className="bg-white p-6 rounded-3xl shadow-sm border border-[#e2e2e7]/50 relative overflow-hidden">
-            <p className="font-label text-[10px] uppercase font-bold tracking-widest text-[#5b5e6a] mb-1">
-              Tổng chi tiêu
+          {/* Chi tiêu tháng hiện tại - Giống Dashboard */}
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50 relative overflow-hidden">
+            <p className="font-label text-[9px] uppercase font-bold tracking-widest text-[#5b5e6a] mb-1">
+              Chi tiêu {getCurrentMonthName()}
             </p>
             <div className="flex items-end justify-between relative z-10">
-              <h3 className="font-headline text-3xl font-black text-[#4b5b9a]">
-                {new Intl.NumberFormat("vi-VN").format(totalExpense)}đ
+              <h3 className="font-headline text-2xl font-black text-[#4b5b9a]">
+                {new Intl.NumberFormat("vi-VN").format(currentMonthExpense)}đ
               </h3>
 
               <div
-                className={`flex items-center gap-1 font-bold text-xs px-2 py-1 rounded-lg ${
+                className={`flex items-center gap-1 font-bold text-[10px] px-2 py-1 rounded-lg ${
                   isExpenseUp
                     ? "text-[#ba1a1a] bg-[#ffdad6]/50"
                     : "text-[#059669] bg-[#d1f4e0]/50"
@@ -368,17 +435,18 @@ export default function TransactionsPage() {
                 </span>
               </div>
             </div>
+            <p className="text-[9px] text-[#767681] mt-2">So với tháng trước</p>
           </section>
         </div>
 
-        <div className="sticky top-0 bg-[#f9f9fe] py-4 z-40 flex items-center justify-between mb-4 -mx-1 px-1 transition-all">
-          <h4 className="font-headline font-bold text-xl text-[#1a1c1f]">
+        <div className="sticky top-0 bg-[#f9f9fe] py-3 z-40 flex items-center justify-between mb-3 -mx-1 px-1 transition-all">
+          <h4 className="font-headline font-bold text-lg text-[#1a1c1f]">
             {searchQuery ? "Kết quả" : "Giao dịch gần đây"}
           </h4>
-          <div className="flex bg-[#e2e2e7] p-1 rounded-xl">
+          <div className="flex bg-[#e2e2e7] p-1 rounded-lg">
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all focus:outline-none outline-none ${
+              className={`px-3 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all focus:outline-none outline-none ${
                 activeTab === "all"
                   ? "bg-white text-[#4b5b9a] shadow-sm"
                   : "text-[#767681]"
@@ -388,7 +456,7 @@ export default function TransactionsPage() {
             </button>
             <button
               onClick={() => setActiveTab("scanned")}
-              className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all focus:outline-none outline-none ${
+              className={`px-3 py-1.5 rounded-md text-[9px] font-bold uppercase transition-all focus:outline-none outline-none ${
                 activeTab === "scanned"
                   ? "bg-white text-[#4b5b9a] shadow-sm"
                   : "text-[#767681]"
@@ -399,15 +467,14 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           {activeTab === "all" ? (
             <>
               {Object.entries(groupedTransactions).map(
                 ([monthGroup, transactions]) => (
-                  <div key={monthGroup} className="space-y-3">
-                    {/* TIÊU ĐỀ NGĂN CÁCH THÁNG */}
+                  <div key={monthGroup} className="space-y-2.5">
                     <div className="flex items-center gap-3 mb-2">
-                      <p className="text-[11px] font-black text-[#767681] uppercase tracking-[0.2em] ml-1">
+                      <p className="text-[10px] font-black text-[#767681] uppercase tracking-[0.2em] ml-1">
                         {monthGroup}
                       </p>
                       <div className="h-[1px] flex-grow bg-[#e2e2e7]/60"></div>
@@ -416,33 +483,32 @@ export default function TransactionsPage() {
                     {transactions.map((tx) => (
                       <div
                         key={tx.id}
-                        className="bg-white p-4 rounded-2xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm active:scale-95 transition-all"
+                        className="bg-white p-3.5 rounded-xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm active:scale-95 transition-all"
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                           <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
                               tx.type === "income"
                                 ? "bg-[#d1f4e0] text-[#059669]"
                                 : "bg-[#f3f3f8] text-[#4b5b9a]"
                             }`}
                           >
-                            <span className="material-symbols-outlined text-2xl">
+                            <span className="material-symbols-outlined text-xl">
                               {tx.icon}
                             </span>
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-sm text-[#1a1c1f] truncate">
+                            <p className="font-bold text-xs text-[#1a1c1f] truncate">
                               {tx.title}
                             </p>
-                            {/* HIỂN THỊ RÕ RÀNG NGÀY + GIỜ BÊN TRONG ITEM */}
-                            <p className="text-[10px] text-[#767681] mt-0.5">
+                            <p className="text-[9px] text-[#767681] mt-0.5">
                               {tx.date} • {tx.time}
                             </p>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
                           <p
-                            className={`font-headline font-bold text-sm ${
+                            className={`font-headline font-bold text-xs ${
                               tx.type === "income"
                                 ? "text-[#059669]"
                                 : "text-[#1a1c1f]"
@@ -450,7 +516,7 @@ export default function TransactionsPage() {
                           >
                             {formatCurrency(tx.amount, tx.type)}
                           </p>
-                          <p className="text-[9px] text-[#767681] font-bold uppercase mt-0.5">
+                          <p className="text-[8px] text-[#767681] font-bold uppercase mt-0.5">
                             {tx.category}
                           </p>
                         </div>
@@ -463,7 +529,7 @@ export default function TransactionsPage() {
               {displayLimitTx < filteredTransactions.length && (
                 <button
                   onClick={handleLoadMoreTx}
-                  className="w-full py-6 text-[#767681] font-bold text-[10px] uppercase tracking-[0.25em] hover:text-[#4b5b9a] transition-colors active:scale-95 focus:outline-none outline-none"
+                  className="w-full py-5 text-[#767681] font-bold text-[9px] uppercase tracking-[0.25em] hover:text-[#4b5b9a] transition-colors active:scale-95 focus:outline-none outline-none"
                 >
                   Xem thêm giao dịch (
                   {filteredTransactions.length - displayLimitTx})
@@ -473,21 +539,20 @@ export default function TransactionsPage() {
           ) : (
             <>
               {Object.entries(groupedInvoices).map(([monthGroup, invoices]) => (
-                <div key={monthGroup} className="space-y-3">
-                  {/* TIÊU ĐỀ NGĂN CÁCH THÁNG DÀNH CHO HÓA ĐƠN */}
+                <div key={monthGroup} className="space-y-2.5">
                   <div className="flex items-center gap-3 mb-2">
-                    <p className="text-[11px] font-black text-[#767681] uppercase tracking-[0.2em] ml-1">
+                    <p className="text-[10px] font-black text-[#767681] uppercase tracking-[0.2em] ml-1">
                       {monthGroup}
                     </p>
                     <div className="h-[1px] flex-grow bg-[#e2e2e7]/60"></div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     {invoices.map((inv) => (
                       <div
                         key={inv.id}
                         onClick={() => handleOpenInvoice(inv)}
-                        className="group bg-white rounded-2xl overflow-hidden border border-[#e2e2e7]/50 shadow-sm relative aspect-[3/4] cursor-pointer"
+                        className="group bg-white rounded-xl overflow-hidden border border-[#e2e2e7]/50 shadow-sm relative aspect-[3/4] cursor-pointer"
                       >
                         <Image
                           src={inv.imageUrl}
@@ -499,25 +564,24 @@ export default function TransactionsPage() {
 
                         <div className="absolute top-2 right-2">
                           {inv.status === "Đã chia tiền" ? (
-                            <span className="bg-[#10b981] text-white text-[8px] font-bold px-2 py-1 rounded-full shadow-sm">
+                            <span className="bg-[#10b981] text-white text-[7px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                               Đã chia
                             </span>
                           ) : (
-                            <span className="bg-[#ba1a1a] text-white text-[8px] font-bold px-2 py-1 rounded-full shadow-sm animate-pulse">
+                            <span className="bg-[#ba1a1a] text-white text-[7px] font-bold px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
                               Chưa chia
                             </span>
                           )}
                         </div>
 
-                        <div className="absolute bottom-0 p-3 w-full text-white text-xs">
-                          <p className="font-bold truncate opacity-90 uppercase">
+                        <div className="absolute bottom-0 p-2.5 w-full text-white text-xs">
+                          <p className="font-bold truncate opacity-90 uppercase text-[10px]">
                             {inv.merchant}
                           </p>
                           <p className="font-black mt-0.5 text-sm">
                             {new Intl.NumberFormat("vi-VN").format(inv.amount)}đ
                           </p>
-                          {/* HIỂN THỊ NGÀY BÊN TRONG ITEM HÓA ĐƠN */}
-                          <p className="text-[9px] opacity-80 mt-1">
+                          <p className="text-[8px] opacity-80 mt-0.5">
                             {inv.date} • {inv.time}
                           </p>
                         </div>
@@ -530,7 +594,7 @@ export default function TransactionsPage() {
               {displayLimitInv < MOCK_INVOICES.length && (
                 <button
                   onClick={handleLoadMoreInv}
-                  className="w-full py-4 text-[#767681] font-bold text-[10px] uppercase tracking-[0.25em] hover:text-[#4b5b9a] transition-colors active:scale-95 focus:outline-none outline-none"
+                  className="w-full py-4 text-[#767681] font-bold text-[9px] uppercase tracking-[0.25em] hover:text-[#4b5b9a] transition-colors active:scale-95 focus:outline-none outline-none"
                 >
                   Xem thêm hóa đơn ({MOCK_INVOICES.length - displayLimitInv})
                 </button>
@@ -540,8 +604,8 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* MODAL CHI TIẾT OCR */}
-      {selectedInvoice && (
+      {/* MODAL CHI TIẾT OCR - Ẩn/Hiện dựa trên bàn phím ảo */}
+      {selectedInvoice && !isKeyboardVisible && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 animate-in fade-in duration-200"
           onClick={() => {
@@ -584,7 +648,7 @@ export default function TransactionsPage() {
               </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto px-6 py-8 space-y-8 scrollbar-hide rounded-t-[2.5rem] -mt-6 bg-[#f9f9fe] shadow-2xl relative z-10">
+            <div className="flex-grow overflow-y-auto px-5 py-8 space-y-8 scrollbar-hide rounded-t-[2.5rem] -mt-6 bg-[#f9f9fe] shadow-2xl relative z-10">
               <div className="grid grid-cols-2 gap-4 border-b border-[#e2e2e7] pb-6">
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-black text-[#4b5b9a] uppercase tracking-[0.15em]">
@@ -708,21 +772,21 @@ export default function TransactionsPage() {
               </div>
             </div>
 
-            <div className="p-6 bg-[#f9f9fe] border-t border-[#e2e2e7] shrink-0 grid grid-cols-2 gap-3">
+            <div className="p-5 bg-[#f9f9fe] border-t border-[#e2e2e7] shrink-0 grid grid-cols-2 gap-3">
               <button
                 onClick={() => {
                   setSelectedInvoice(null);
                   setItems([]);
                 }}
                 disabled={isSaving}
-                className="w-full py-4 bg-[#e2e2e7] text-[#454650] font-headline font-bold rounded-2xl active:scale-95 transition-all disabled:opacity-50 focus:outline-none outline-none"
+                className="w-full py-3.5 bg-[#e2e2e7] text-[#454650] font-headline font-bold rounded-xl active:scale-95 transition-all disabled:opacity-50 focus:outline-none outline-none"
               >
                 Hủy bỏ
               </button>
               <button
                 onClick={handleSaveInvoice}
                 disabled={isSaving}
-                className={`w-full py-4 font-headline font-bold rounded-2xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 focus:outline-none outline-none ${
+                className={`w-full py-3.5 font-headline font-bold rounded-xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 focus:outline-none outline-none ${
                   isSaving
                     ? "bg-[#c6c5d1] text-white shadow-none cursor-not-allowed"
                     : "bg-[#1a1c1f] text-white shadow-black/20 hover:bg-black"

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -12,10 +12,30 @@ export default function RegisterPage() {
   // ==========================================
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [dob, setDob] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
   const [errorMsg, setErrorMsg] = useState("");
+
+  // ==========================================
+  // REFS ĐỂ FOCUS VÀO INPUT KHI LỖI
+  // ==========================================
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // ==========================================
+  // TỰ ĐỘNG ẨN THÔNG BÁO SAU 3 GIÂY
+  // ==========================================
+  useEffect(() => {
+    if (errorMsg) {
+      const timer = setTimeout(() => {
+        setErrorMsg("");
+      }, 1500);
+      return () => clearTimeout(timer); // Xóa timer nếu component re-render
+    }
+  }, [errorMsg]);
 
   // ==========================================
   // HANDLER: GỬI THÔNG TIN VÀ CHUYỂN HƯỚNG
@@ -24,18 +44,76 @@ export default function RegisterPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    // Kiểm tra rỗng
-    if (!name || !email || !dob || !password) {
-      setErrorMsg("Vui lòng điền đầy đủ tất cả thông tin.");
+    // 1. Kiểm tra Họ và Tên
+    if (!name.trim()) {
+      setErrorMsg("Vui lòng nhập Họ và Tên của bạn.");
+      nameRef.current?.focus();
       return;
     }
 
-    // Chuyển sang trang Verify dùng chung, truyền param type=register
+    // 2. Kiểm tra Email (Rỗng và định dạng)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      setErrorMsg("Vui lòng nhập địa chỉ Email.");
+      emailRef.current?.focus();
+      return;
+    } else if (!emailRegex.test(email)) {
+      setErrorMsg("Email không đúng định dạng. Vui lòng kiểm tra lại.");
+      emailRef.current?.focus();
+      return;
+    }
+
+    // 3. Kiểm tra Số điện thoại
+    const phoneRegex = /^(0|\+84)[0-9]{9}$/;
+
+    if (!phone.trim()) {
+      setErrorMsg("Vui lòng nhập Số điện thoại.");
+      phoneRef.current?.focus();
+      return;
+    } else if (!phoneRegex.test(phone.trim())) {
+      setErrorMsg(
+        "Số điện thoại không hợp lệ (Phải đủ 10 số, bắt đầu bằng 0 hoặc +84)."
+      );
+      phoneRef.current?.focus();
+      return;
+    }
+
+    // 4. Kiểm tra Mật khẩu
+    if (!password) {
+      setErrorMsg("Vui lòng nhập Mật khẩu.");
+      passwordRef.current?.focus();
+      return;
+    } else if (password.length < 6) {
+      setErrorMsg("Mật khẩu phải có ít nhất 6 ký tự.");
+      passwordRef.current?.focus();
+      return;
+    }
+
+    // Nếu qua hết các bước kiểm tra -> Chuyển sang trang Verify
     router.push(`/verify?type=register&email=${encodeURIComponent(email)}`);
   };
 
   return (
-    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen flex flex-col items-center relative overflow-x-hidden">
+    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col items-center relative overflow-x-hidden">
+      {/* ================================================================
+          MODAL CẢNH BÁO Ở GIỮA MÀN HÌNH (TỰ ĐỘNG ẨN, KHÔNG CHẶN TƯƠNG TÁC)
+          ================================================================ */}
+      {errorMsg && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] px-4 pointer-events-none w-full max-w-sm">
+          <div className="bg-white rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center text-center border border-gray-100">
+            <div className="w-14 h-14 rounded-full bg-[#ffdad6] text-[#ba1a1a] flex items-center justify-center mb-4">
+              <span className="material-symbols-outlined text-3xl">error</span>
+            </div>
+            <h3 className="font-headline font-bold text-xl text-[#1a1c1f] mb-2">
+              Lỗi thông tin
+            </h3>
+            <p className="text-[#616470] text-sm px-2 leading-relaxed">
+              {errorMsg}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Decorative Element (Asymmetric Wave from Top Right) */}
       <div className="absolute top-0 right-0 -z-10 opacity-20 pointer-events-none">
         <svg
@@ -73,20 +151,12 @@ export default function RegisterPage() {
         >
           <span className="material-symbols-outlined text-2xl">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg ml-4 text-[#1a1c1f]">
+        <h1 className="font-headline font-bold text-lg ml-4 text-[#4b5b9a]">
           Tạo tài khoản
         </h1>
       </nav>
 
       <main className="flex-1 w-full max-w-md px-6 pt-4 pb-12 flex flex-col">
-        {/* Hiển thị thông báo lỗi */}
-        {errorMsg && (
-          <div className="mb-4 bg-[#ffdad6] text-[#ba1a1a] text-xs font-bold p-3 rounded-xl flex items-start gap-2 animate-in fade-in slide-in-from-top-2 border border-[#93000a]/20">
-            <span className="material-symbols-outlined text-[16px]">error</span>
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
         {/* ================================================================
             FORM HOÀN TẤT HỒ SƠ
             ================================================================ */}
@@ -126,12 +196,14 @@ export default function RegisterPage() {
             onSubmit={handleRegisterInfo}
             className="space-y-5 flex-grow flex flex-col"
           >
+            {/* HỌ VÀ TÊN */}
             <div className="space-y-1.5">
               <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
                 Họ và Tên
               </label>
               <div className="relative">
                 <input
+                  ref={nameRef}
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -141,12 +213,14 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* EMAIL */}
             <div className="space-y-1.5">
               <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
                 Email
               </label>
               <div className="relative">
                 <input
+                  ref={emailRef}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -159,29 +233,34 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* SỐ ĐIỆN THOẠI */}
             <div className="space-y-1.5">
               <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
-                Ngày sinh
+                Số điện thoại
               </label>
               <div className="relative">
                 <input
-                  type="date"
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                  className="w-full bg-[#e2e2e7]/50 border-none rounded-2xl pl-5 pr-12 py-4 text-[#1a1c1f] placeholder:text-[#767681] focus:ring-2 focus:ring-[#94a3e8] transition-all outline-none font-medium [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                  ref={phoneRef}
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="0123 456 789"
+                  className="w-full bg-[#e2e2e7]/50 border-none rounded-2xl pl-5 pr-12 py-4 text-[#1a1c1f] placeholder:text-[#767681] focus:ring-2 focus:ring-[#94a3e8] transition-all outline-none font-medium"
                 />
-                <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#4b5b9a] pointer-events-none">
-                  calendar_today
+                <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
+                  call
                 </span>
               </div>
             </div>
 
+            {/* MẬT KHẨU */}
             <div className="space-y-1.5">
               <label className="font-headline text-xs font-bold text-[#4b5b9a] uppercase tracking-widest ml-2">
                 Mật khẩu
               </label>
               <div className="relative">
                 <input
+                  ref={passwordRef}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -190,36 +269,6 @@ export default function RegisterPage() {
                 />
                 <span className="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-[#4b5b9a]">
                   visibility
-                </span>
-              </div>
-            </div>
-
-            {/* Savings Goal Preview */}
-            <div className="bg-[#f3f3f8] rounded-2xl p-5 border border-[#e2e2e7] mt-2">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="bg-[#dde1ff] p-3 rounded-2xl">
-                  <span className="material-symbols-outlined text-[#4b5b9a]">
-                    rocket_launch
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-headline font-bold text-[#1a1c1f]">
-                    Lộ trình Momentum
-                  </h4>
-                  <p className="font-body text-[11px] text-[#616470] mt-0.5">
-                    Tự động thiết lập mục tiêu sau khi hoàn tất
-                  </p>
-                </div>
-              </div>
-              <div className="w-full h-2.5 bg-[#e2e2e7] rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] w-[15%] rounded-full"></div>
-              </div>
-              <div className="flex justify-between mt-2">
-                <span className="text-[9px] font-bold text-[#4b5b9a] uppercase tracking-widest">
-                  Khởi tạo
-                </span>
-                <span className="text-[9px] font-bold text-[#767681] uppercase tracking-widest">
-                  15% Hoàn tất
                 </span>
               </div>
             </div>

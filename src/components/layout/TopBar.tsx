@@ -15,7 +15,7 @@ const getInitials = (name: string) => {
 };
 
 export default function TopBar() {
-  const userName = "Duyên";
+  const userName = "A";
 
   // 1. Khởi tạo state cho số lượng thông báo
   const [notiCount, setNotiCount] = useState<number>(0);
@@ -57,7 +57,7 @@ export default function TopBar() {
             Chào, {userName}
           </span>
           <span className="text-[10px] text-[#767681] font-bold uppercase tracking-widest mt-0.5">
-            Momentum
+            TIÊU TỈNH
           </span>
         </div>
       </div>

@@ -7,17 +7,112 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
 
+  // =========================================
+  // STATE: Quản lý thông báo
+  // =========================================
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: "success" | "error" | "warning";
+    message: string;
+  }>({
+    show: false,
+    type: "success",
+    message: "",
+  });
+
+  // Hàm hiển thị thông báo (tự tắt sau 3 giây)
+  const showNotification = (
+    type: "success" | "error" | "warning",
+    message: string
+  ) => {
+    setNotification({ show: true, type, message });
+    setTimeout(() => {
+      setNotification({ show: false, type: "success", message: "" });
+    }, 3000);
+  };
+
+  // =========================================
+  // HANDLER: Gửi yêu cầu
+  // =========================================
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      alert("Vui lòng nhập email của bạn!");
+
+    // 1. Kiểm tra rỗng
+    if (!email.trim()) {
+      showNotification("error", "Vui lòng nhập email của bạn!");
       return;
     }
-    router.push(`/verify?type=reset&email=${encodeURIComponent(email)}`);
+
+    // 2. Kiểm tra định dạng email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showNotification("error", "Email không đúng định dạng!");
+      return;
+    }
+
+    // 3. Hiện thông báo thành công màu xanh lá
+    showNotification(
+      "success",
+      "Mã xác nhận đã được gửi! Đang chuyển hướng..."
+    );
+
+    // 4. Đợi 2 giây để người dùng đọc thông báo rồi mới chuyển trang
+    setTimeout(() => {
+      router.push(`/verify?type=reset&email=${encodeURIComponent(email)}`);
+    }, 2000);
   };
 
   return (
-    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen flex flex-col relative overflow-x-hidden">
+    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col relative overflow-x-hidden">
+      {/* =========================================
+          THÔNG BÁO - Nổi giữa màn hình
+          ========================================= */}
+      {notification.show && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-full max-w-[280px] pointer-events-none px-4">
+          <div
+            className={`animate-in fade-in zoom-in-95 duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-white rounded-3xl p-5 flex flex-col items-center justify-center text-center border ${
+              notification.type === "success"
+                ? "border-[#059669]/20" // Xanh lá
+                : notification.type === "error"
+                ? "border-[#ba1a1a]/20" // Đỏ
+                : "border-[#856404]/20" // Vàng
+            }`}
+          >
+            {/* Icon */}
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${
+                notification.type === "success"
+                  ? "bg-[#d1fae5] text-[#059669]" // Nền nhạt, Icon xanh lá
+                  : notification.type === "error"
+                  ? "bg-[#ffdad6] text-[#ba1a1a]"
+                  : "bg-[#fff3cd] text-[#856404]"
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl">
+                {notification.type === "success"
+                  ? "check_circle"
+                  : notification.type === "error"
+                  ? "error"
+                  : "warning"}
+              </span>
+            </div>
+
+            {/* Nội dung chữ */}
+            <span
+              className={`font-headline font-bold text-sm leading-relaxed px-2 ${
+                notification.type === "success"
+                  ? "text-[#059669]" // Chữ xanh lá
+                  : notification.type === "error"
+                  ? "text-[#ba1a1a]"
+                  : "text-[#856404]"
+              }`}
+            >
+              {notification.message}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Background Organic Ornaments */}
       <div className="absolute top-0 -right-20 w-80 h-80 bg-[#94a3e8]/20 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10 pointer-events-none"></div>
       <div className="absolute top-1/2 -left-32 w-64 h-64 bg-[#e0e2f1]/30 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10 pointer-events-none"></div>
@@ -59,7 +154,8 @@ export default function ForgotPasswordPage() {
 
           {/* Form Card (Bo khung vuông vắn) */}
           <div className="bg-white p-6 rounded-2xl border border-[#e2e2e7] shadow-sm space-y-4">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            {/* THÊM noValidate Ở ĐÂY ĐỂ TẮT THÔNG BÁO MẶC ĐỊNH CỦA TRÌNH DUYỆT */}
+            <form onSubmit={handleSubmit} noValidate className="space-y-6">
               {/* Input Field */}
               <div className="space-y-1.5">
                 <label
@@ -78,7 +174,7 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="momentum@edu.vn"
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all outline-none"
                   />
                 </div>
               </div>
@@ -116,16 +212,6 @@ export default function ForgotPasswordPage() {
               </div>
             </form>
           </div>
-
-          {/* Context Links */}
-          {/* <div className="mt-10 text-center">
-            <p className="text-xs text-[#616470] font-medium mb-1">
-              Gặp khó khăn khi nhận mã?
-            </p>
-            <button className="text-xs font-bold text-[#4b5b9a] hover:text-[#283775] transition-colors">
-              Liên hệ bộ phận hỗ trợ
-            </button>
-          </div> */}
         </div>
       </main>
     </div>

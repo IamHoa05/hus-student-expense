@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 // =======================================================================
-// MOCK DATA
+// MOCK DATA (Đã xóa thuộc tính color cứng)
 // =======================================================================
 const INITIAL_BUDGETS = [
   {
@@ -14,7 +14,6 @@ const INITIAL_BUDGETS = [
     spent: 4200000,
     limit: 5000000,
     icon: "restaurant",
-    color: "bg-[#4b5b9a]",
   },
   {
     id: "b_transport",
@@ -22,7 +21,6 @@ const INITIAL_BUDGETS = [
     spent: 600000,
     limit: 1500000,
     icon: "directions_bus",
-    color: "bg-[#94a3e8]",
   },
   {
     id: "b_shopping",
@@ -30,25 +28,23 @@ const INITIAL_BUDGETS = [
     spent: 1800000,
     limit: 2000000,
     icon: "shopping_bag",
-    color: "bg-[#ba1a1a]",
   },
   {
     id: "b_custom_1",
-    name: "Thú cưng", // Hạng mục người dùng tự thêm
+    name: "Thú cưng",
     spent: 450000,
     limit: 1000000,
     icon: "pets",
-    color: "bg-[#10b981]",
   },
 ];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("vi-VN").format(amount);
 };
+
 const getInitials = (name: string) => {
   const names = name.split(" ");
   if (names.length >= 2) {
-    // Lấy chữ cái đầu của từ đầu và từ cuối (Ví dụ: Nguyễn Minh Duyên -> ND)
     return (
       names[0].charAt(0) + names[names.length - 1].charAt(0)
     ).toUpperCase();
@@ -63,39 +59,59 @@ export default function ProfilePage() {
   // STATES: Hồ sơ cá nhân
   // =========================================
   const [profile, setProfile] = useState({
-    name: "Duyên",
-    email: "duyen.ds@vnu.edu.vn",
-    userId: "user_12345", // ID mặc định khi đăng ký
-    hasChangedId: false, // Cờ kiểm tra xem đã đổi ID lần nào chưa
+    name: "A",
+    email: "nguyenvana.ds@vnu.edu.vn",
+    userId: "user_12345",
+    hasChangedId: false,
     plan: "Premium Plan",
     status: "Active",
     avatar:
       "https://lh3.googleusercontent.com/aida-public/AB6AXuB72RPYIq7DiM-iBtMl9Bd5b6OJTTQoh8f21jkInOk9cXa2k192X-rO9TZ3aLW_dWWOmqzcTmS_UUHM05I_0eObC0sdC_VENaBBz1UT0VPd_f0EJYC2avUn0OpfKMS9v5btW8y_C5ypySyXWd83U7BAyQwMF4pfeOu2bsVeIxygQxBj9cuTBx1A-tEUCoSMS4ievAiUyLv_5b4Kq1kkEIlHsxajpF1FqjKgaBlQEgH6T-iT9Mg6pb1RInAVx1XqaRe26cGZaQy29pU",
   });
 
-  // State tạm để lưu giá trị đang gõ trên Form
   const [editProfile, setEditProfile] = useState({
     name: profile.name,
     userId: profile.userId,
   });
 
+  // State cho thông báo dạng Popup giữa màn hình
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: "success" | "error" | "warning";
+    message: string;
+  }>({
+    show: false,
+    type: "success",
+    message: "",
+  });
+
   const isProfileChanged =
     editProfile.name !== profile.name || editProfile.userId !== profile.userId;
 
+  // Hàm hiển thị thông báo
+  const showNotification = (
+    type: "success" | "error" | "warning",
+    message: string
+  ) => {
+    setNotification({ show: true, type, message });
+    setTimeout(() => {
+      setNotification({ show: false, type: "success", message: "" });
+    }, 3000);
+  };
+
   const handleSaveProfile = () => {
     if (!editProfile.name.trim() || !editProfile.userId.trim()) {
-      alert("Tên và ID không được để trống!");
+      showNotification("error", "Tên và ID không được để trống!");
       return;
     }
 
     const willChangeId = editProfile.userId !== profile.userId;
 
     if (willChangeId && profile.hasChangedId) {
-      alert("Bạn chỉ được phép đổi ID 1 lần duy nhất!");
+      showNotification("warning", "Bạn chỉ được phép đổi ID 1 lần duy nhất!");
       return;
     }
 
-    // Cập nhật Profile chính thức
     setProfile({
       ...profile,
       name: editProfile.name,
@@ -103,7 +119,7 @@ export default function ProfilePage() {
       hasChangedId: profile.hasChangedId || willChangeId,
     });
 
-    alert("Cập nhật thông tin cá nhân thành công!");
+    showNotification("success", "Cập nhật thông tin cá nhân thành công!");
   };
 
   // =========================================
@@ -124,7 +140,7 @@ export default function ProfilePage() {
   };
 
   const handleSaveBudgets = () => {
-    alert("Đã lưu thiết lập hạn mức mới thành công!");
+    showNotification("success", "Đã lưu thiết lập hạn mức mới thành công!");
     setIsBudgetChanged(false);
   };
 
@@ -133,60 +149,110 @@ export default function ProfilePage() {
   };
 
   return (
-    <main className="flex-grow w-full max-w-md mx-auto px-6 pt-4 pb-28 relative min-h-screen bg-[#f9f9fe]">
+    <main className="flex-grow w-full max-w-md mx-auto px-5 pt-4 pb-24 relative min-h-screen bg-[#f9f9fe]">
       {/* TopAppBar */}
-      <header className="fixed top-0 w-full max-w-md z-50 bg-[#f9f9fe]/80 backdrop-blur-xl border-b border-[#e2e2e7]/30 flex justify-between items-center px-6 py-4 -ml-6">
-        <div className="flex items-center gap-4">
+      <header className="fixed top-0 w-full max-w-md z-50 bg-[#f9f9fe]/80 backdrop-blur-xl border-b border-[#e2e2e7]/30 flex justify-between items-center px-5 py-3 -ml-5">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95"
+            className="p-1.5 -ml-1.5 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95"
           >
             <span className="material-symbols-outlined text-xl">
               arrow_back
             </span>
           </button>
-          <h1 className="font-headline font-bold text-xl tracking-tight text-[#4b5b9a]">
+          <h1 className="font-headline font-bold text-lg tracking-tight text-[#4b5b9a]">
             Cá nhân
           </h1>
         </div>
       </header>
 
-      <div className="pt-16 space-y-8">
+      {/* Vùng Wrapper thu hẹp lại các khối bên dưới (max-w-[340px]) */}
+      <div className="pt-14 space-y-5 max-w-[340px] mx-auto w-full">
         {/* =========================================
-            Section 1: Profile Info Card (Editable)
+            THÔNG BÁO - Nổi giữa màn hình
             ========================================= */}
-        <section className="relative group mt-6">
-          <div className="absolute -inset-1 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] opacity-10 blur-xl rounded-2xl"></div>
-          <div className="relative bg-white p-8 rounded-[2rem] flex flex-col items-center text-center shadow-sm border border-[#e2e2e7]/50">
-            {/* Avatar */}
-            <div className="relative mb-5">
-              <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8]">
-                <div className="w-full h-full rounded-full border-4 border-white flex items-center justify-center bg-[#e0e2f1] text-[#4b5b9a]">
-                  {/* Hiển thị chữ cái đầu thay vì Image */}
-                  <span className="text-3xl font-black font-headline tracking-tighter">
-                    {getInitials(editProfile.name)}
+        {notification.show && (
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-full max-w-[280px] pointer-events-none px-4">
+            <div
+              className={`animate-in fade-in zoom-in-95 duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-white rounded-3xl p-5 flex flex-col items-center justify-center text-center border ${
+                notification.type === "success"
+                  ? "border-[#059669]/20" // SỬA: Viền xanh lá
+                  : notification.type === "error"
+                  ? "border-[#ba1a1a]/20"
+                  : "border-[#856404]/20"
+              }`}
+            >
+              {/* Icon */}
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${
+                  notification.type === "success"
+                    ? "bg-[#d1fae5] text-[#059669]" // SỬA: Nền xanh lá nhạt, Icon xanh lá
+                    : notification.type === "error"
+                    ? "bg-[#ffdad6] text-[#ba1a1a]"
+                    : "bg-[#fff3cd] text-[#856404]"
+                }`}
+              >
+                <span className="material-symbols-outlined text-2xl">
+                  {notification.type === "success"
+                    ? "check_circle"
+                    : notification.type === "error"
+                    ? "error"
+                    : "warning"}
+                </span>
+              </div>
+
+              {/* Nội dung chữ */}
+              <span
+                className={`font-headline font-bold text-sm leading-relaxed px-2 ${
+                  notification.type === "success"
+                    ? "text-[#059669]" // SỬA: Chữ màu xanh lá
+                    : notification.type === "error"
+                    ? "text-[#ba1a1a]"
+                    : "text-[#856404]"
+                }`}
+              >
+                {notification.message}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================
+            Section 1: Profile Card - THU GỌN
+            ========================================= */}
+        <section className="relative group mt-4">
+          <div className="absolute -inset-0.5 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] opacity-10 blur-lg rounded-xl"></div>
+          <div className="relative bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50">
+            {/* Header với Avatar + Info */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="relative">
+                <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8]">
+                  <div className="w-full h-full rounded-full border-2 border-white flex items-center justify-center bg-[#e0e2f1] text-[#4b5b9a]">
+                    <span className="text-lg font-black font-headline">
+                      {getInitials(editProfile.name)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1">
+                <p className="text-[#616470] text-xs mb-1">{profile.email}</p>
+                <div className="flex gap-1.5">
+                  <span className="px-2.5 py-0.5 bg-[#e0e2f1] text-[#616470] text-[9px] font-bold rounded-full uppercase tracking-wider">
+                    {profile.plan}
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-[#dde1ff] text-[#283775] text-[9px] font-bold rounded-full uppercase tracking-wider">
+                    {profile.status}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Thông tin cố định */}
-            <p className="text-[#616470] font-medium text-xs mb-3">
-              {profile.email}
-            </p>
-            <div className="flex gap-2 mb-6">
-              <span className="px-4 py-1.5 bg-[#e0e2f1] text-[#616470] text-[10px] font-bold rounded-full uppercase tracking-wider">
-                {profile.plan}
-              </span>
-              <span className="px-4 py-1.5 bg-[#dde1ff] text-[#283775] text-[10px] font-bold rounded-full uppercase tracking-wider">
-                {profile.status}
-              </span>
-            </div>
-
-            {/* Form chỉnh sửa Tên và ID */}
-            <div className="w-full space-y-4 text-left border-t border-[#f3f3f8] pt-6">
+            {/* Form chỉnh sửa */}
+            <div className="space-y-3">
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-[#767681] ml-1 mb-1 block">
+                <label className="text-[9px] font-black uppercase tracking-widest text-[#767681] ml-1 mb-1 block">
                   Tên hiển thị
                 </label>
                 <div className="relative">
@@ -196,9 +262,9 @@ export default function ProfilePage() {
                     onChange={(e) =>
                       setEditProfile({ ...editProfile, name: e.target.value })
                     }
-                    className="w-full bg-[#f3f3f8] border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold text-[#1a1c1f] focus:outline-none"
+                    className="w-full bg-[#f3f3f8] border-none rounded-xl py-2.5 pl-9 pr-3 text-sm font-bold text-[#1a1c1f] focus:outline-none"
                   />
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-lg">
+                  <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-base">
                     person
                   </span>
                 </div>
@@ -206,17 +272,15 @@ export default function ProfilePage() {
 
               <div>
                 <div className="flex justify-between items-end mb-1 ml-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-[#767681]">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-[#767681]">
                     ID Người dùng
                   </label>
                   <span
-                    className={`text-[9px] font-bold ${
+                    className={`text-[8px] font-bold ${
                       profile.hasChangedId ? "text-[#ba1a1a]" : "text-[#059669]"
                     }`}
                   >
-                    {profile.hasChangedId
-                      ? "Đã khóa đổi ID"
-                      : "Chỉ được đổi 1 lần"}
+                    {profile.hasChangedId ? "Đã khóa" : "Đổi 1 lần"}
                   </span>
                 </div>
                 <div className="relative">
@@ -227,23 +291,22 @@ export default function ProfilePage() {
                       setEditProfile({ ...editProfile, userId: e.target.value })
                     }
                     disabled={profile.hasChangedId}
-                    className={`w-full border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold focus:focus:outline-none ${
+                    className={`w-full border-none rounded-xl py-2.5 pl-9 pr-3 text-sm font-bold focus:outline-none ${
                       profile.hasChangedId
                         ? "bg-[#e2e2e7]/50 text-[#767681] opacity-70"
                         : "bg-[#f3f3f8] text-[#1a1c1f]"
                     }`}
                   />
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-lg">
+                  <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-base">
                     badge
                   </span>
                 </div>
               </div>
 
-              {/* Nút lưu hồ sơ (Chỉ hiện khi có thay đổi) */}
               {isProfileChanged && (
                 <button
                   onClick={handleSaveProfile}
-                  className="w-full mt-2 py-3.5 bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white rounded-2xl font-bold text-sm shadow-lg shadow-[#4b5b9a]/20 active:scale-95 transition-all animate-in slide-in-from-bottom-2"
+                  className="w-full mt-1 py-2.5 bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white rounded-xl font-bold text-xs shadow-md shadow-[#4b5b9a]/20 active:scale-95 transition-all"
                 >
                   Lưu thông tin
                 </button>
@@ -253,46 +316,57 @@ export default function ProfilePage() {
         </section>
 
         {/* =========================================
-            Section 2: Budget Limits (Editable)
+            Section 2: Budget Cards - MÀU ĐỘNG 85%
             ========================================= */}
-        <section className="space-y-4">
+        <section className="space-y-3">
           <div className="flex items-end justify-between px-1">
             <div>
-              <h3 className="font-headline font-bold text-xl tracking-tight text-[#1a1c1f]">
+              <h3 className="font-headline font-bold text-base tracking-tight text-[#1a1c1f]">
                 Thiết lập hạn mức
               </h3>
-              <p className="text-[#616470] text-xs mt-1">
-                Các hạng mục tự động & tự thêm
-              </p>
             </div>
             {isBudgetChanged && (
               <button
                 onClick={handleSaveBudgets}
-                className="text-[10px] font-black uppercase tracking-widest text-[#4b5b9a] bg-[#dde1ff] px-4 py-2 rounded-xl animate-pulse"
+                className="text-[9px] font-black uppercase tracking-widest text-[#4b5b9a] bg-[#dde1ff] px-3 py-1.5 rounded-lg"
               >
-                Lưu hạn mức
+                Lưu
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-2.5">
             {budgets.map((budget) => {
+              // Tính toán phần trăm
               const percentage =
                 Math.min(
                   Math.round((budget.spent / budget.limit) * 100),
                   100
                 ) || 0;
-              const isOverWarning = percentage >= 80;
+
+              // Xác định trạng thái Nguy hiểm (>= 85%)
+              const isOverWarning = percentage >= 85;
+
+              // Đặt màu động: Quá 85% thì Đỏ, còn lại Xanh App
+              const dynamicColorClass = isOverWarning
+                ? "bg-[#ba1a1a]"
+                : "bg-[#4b5b9a]";
+              const dynamicTextClass = isOverWarning
+                ? "text-[#ba1a1a]"
+                : "text-[#4b5b9a]";
 
               return (
                 <div
                   key={budget.id}
-                  className="bg-white border border-[#e2e2e7]/50 p-5 rounded-[2rem] space-y-4 shadow-sm hover:border-[#dde1ff] transition-colors"
+                  className="bg-white border border-[#e2e2e7]/50 p-4 rounded-xl space-y-3 shadow-sm hover:border-[#dde1ff] transition-colors"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-[#f3f3f8] flex items-center justify-center text-[#4b5b9a]">
-                        <span className="material-symbols-outlined text-2xl">
+                  {/* Header card */}
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-lg bg-[#f3f3f8] flex items-center justify-center ${dynamicTextClass}`}
+                      >
+                        <span className="material-symbols-outlined text-xl">
                           {budget.icon}
                         </span>
                       </div>
@@ -300,48 +374,43 @@ export default function ProfilePage() {
                         <h4 className="font-headline font-bold text-[#1a1c1f] text-sm">
                           {budget.name}
                         </h4>
-                        <p className="text-[10px] text-[#616470] font-medium uppercase tracking-widest mt-0.5">
+                        <p className="text-[9px] text-[#616470] font-medium uppercase tracking-wider">
                           Đã tiêu {formatCurrency(budget.spent)}đ
                         </p>
                       </div>
                     </div>
                     <span
-                      className={`font-bold font-headline text-lg ${
-                        isOverWarning ? "text-[#ba1a1a]" : "text-[#4b5b9a]"
-                      }`}
+                      className={`font-bold font-headline text-base ${dynamicTextClass}`}
                     >
                       {percentage}%
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="w-full h-2 bg-[#f3f3f8] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-1000 ${
-                          isOverWarning ? "bg-[#ba1a1a]" : budget.color
-                        }`}
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
+                  {/* Progress bar */}
+                  <div className="w-full h-1.5 bg-[#f3f3f8] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${dynamicColorClass}`}
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
 
-                    {/* Chỉnh sửa hạn mức (Input) */}
-                    <div className="flex justify-between items-center bg-[#f9f9fe] p-3 rounded-2xl border border-[#e2e2e7]/40">
-                      <span className="text-[11px] font-bold text-[#616470] uppercase tracking-wider">
-                        Giới hạn tháng
+                  {/* Input chỉnh hạn mức */}
+                  <div className="flex justify-between items-center bg-[#f9f9fe] p-2 rounded-lg">
+                    <span className="text-[9px] font-bold text-[#616470] uppercase tracking-wider">
+                      Giới hạn
+                    </span>
+                    <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-[#e2e2e7]">
+                      <input
+                        type="text"
+                        value={formatCurrency(budget.limit)}
+                        onChange={(e) =>
+                          handleBudgetChange(budget.id, e.target.value)
+                        }
+                        className="w-20 text-right bg-transparent border-none focus:outline-none font-headline font-bold p-0 text-[#1a1c1f] text-xs"
+                      />
+                      <span className="text-xs font-bold text-[#767681]">
+                        đ
                       </span>
-                      <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl border border-[#e2e2e7] focus-within:border-[#4b5b9a] transition-all shadow-sm">
-                        <input
-                          type="text"
-                          value={formatCurrency(budget.limit)}
-                          onChange={(e) =>
-                            handleBudgetChange(budget.id, e.target.value)
-                          }
-                          className="w-24 text-right bg-transparent border-none focus:outline-none font-headline font-bold p-0 text-[#1a1c1f] text-sm"
-                        />
-                        <span className="text-sm font-bold text-[#767681]">
-                          đ
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -351,24 +420,21 @@ export default function ProfilePage() {
         </section>
 
         {/* =========================================
-            Section 3: Alerts Settings 
+            Section 3: Settings - THU GỌN
             ========================================= */}
-        <section className="bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white p-8 rounded-[2rem] shadow-xl shadow-[#4b5b9a]/20">
-          <div className="flex items-center gap-3 mb-6">
-            <span className="material-symbols-outlined text-3xl">
+        <section className="bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white p-5 rounded-2xl shadow-lg shadow-[#4b5b9a]/20">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-symbols-outlined text-2xl">
               notifications_active
             </span>
-            <h3 className="font-headline font-bold text-xl">
-              Cài đặt thông báo
-            </h3>
+            <h3 className="font-headline font-bold text-base">Thông báo</h3>
           </div>
-          <div className="space-y-6">
+
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm">Cảnh báo hạn mức</p>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Thông báo khi chi tiêu đạt 80%
-                </p>
+                <p className="font-bold text-xs">Cảnh báo hạn mức</p>
+                <p className="text-[9px] opacity-80 mt-0.5">Khi đạt 85%</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -377,7 +443,7 @@ export default function ProfilePage() {
                   checked={alertLimit}
                   onChange={() => setAlertLimit(!alertLimit)}
                 />
-                <div className="w-12 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#94a3e8]"></div>
+                <div className="w-10 h-5 bg-white/20 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#94a3e8]"></div>
               </label>
             </div>
 
@@ -385,9 +451,9 @@ export default function ProfilePage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm">Báo cáo hàng tuần</p>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Tóm tắt chi tiêu vào sáng Thứ Hai
+                <p className="font-bold text-xs">Báo cáo hàng tuần</p>
+                <p className="text-[9px] opacity-80 mt-0.5">
+                  Tóm tắt sáng Thứ Hai
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -397,25 +463,25 @@ export default function ProfilePage() {
                   checked={weeklyReport}
                   onChange={() => setWeeklyReport(!weeklyReport)}
                 />
-                <div className="w-12 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#94a3e8]"></div>
+                <div className="w-10 h-5 bg-white/20 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#94a3e8]"></div>
               </label>
             </div>
           </div>
         </section>
 
         {/* =========================================
-            Logout / Footer Area 
+            Footer
             ========================================= */}
-        <div className="pt-2 flex flex-col items-center gap-4">
+        <div className="pt-2 flex flex-col items-center gap-3">
           <button
             onClick={handleLogout}
-            className="w-full py-4 bg-[#fff0ee] hover:bg-[#ffdad6] text-[#ba1a1a] font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors active:scale-95 shadow-sm"
+            className="w-full py-3 bg-[#fff0ee] hover:bg-[#ffdad6] text-[#ba1a1a] font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 transition-colors active:scale-95"
           >
-            <span className="material-symbols-outlined">logout</span>
+            <span className="material-symbols-outlined text-lg">logout</span>
             Đăng xuất
           </button>
-          <p className="text-[10px] text-[#767681] font-black tracking-widest uppercase mt-4">
-            Momentum v2.4.0 • Made for Duyên
+          <p className="text-[9px] text-[#767681] font-black tracking-widest uppercase">
+            TIÊU TỈNH v2.4.0 • Made for {profile.name}
           </p>
         </div>
       </div>
