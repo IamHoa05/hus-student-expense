@@ -14,7 +14,7 @@ const CATEGORIES = [
   { id: "c5", name: "Mua sắm", icon: "shopping_bag" },
   { id: "c6", name: "Giải trí", icon: "sports_esports" },
   { id: "c7", name: "Cố định", icon: "home_work" },
-  { id: "group", name: "Nhóm", icon: "groups" },
+  //{ id: "group", name: "Nhóm", icon: "groups" },
   { id: "c8", name: "Khác", icon: "more_horiz" },
 ];
 

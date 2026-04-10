@@ -128,12 +128,12 @@ const formatCurrency = (amount: number) => {
 // 2. GIAO DIỆN CHÍNH
 // =======================================================================
 export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
+  //const [isLoading, setIsLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState("");
   const [balance, setBalance] = useState(MOCK_BALANCE);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 600);
+    //const timer = setTimeout(() => setIsLoading(false), 600);
 
     // Set tháng hiện tại
     setCurrentMonth(getCurrentMonth());
@@ -149,19 +149,19 @@ export default function DashboardPage() {
     }
     localStorage.setItem("lastResetMonth", currentMonthIndex.toString());
 
-    return () => clearTimeout(timer);
+    // return () => clearTimeout(timer);
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-[#4b5b9a] font-bold gap-3">
-        <span className="material-symbols-outlined animate-spin text-4xl">
-          autorenew
-        </span>
-        <p>Đang đồng bộ dữ liệu...</p>
-      </div>
-    );
-  }
+  // if (isLoading) {
+  //   return (
+  //     <div className="min-h-screen flex flex-col items-center justify-center text-[#4b5b9a] font-bold gap-3">
+  //       <span className="material-symbols-outlined animate-spin text-4xl">
+  //         autorenew
+  //       </span>
+  //       <p>Đang đồng bộ dữ liệu...</p>
+  //     </div>
+  //   );
+  // }
 
   return (
     // ĐỔI px-4 THÀNH px-5 ĐỂ KHỚP VỚI TRANG PROFILE

@@ -44,21 +44,19 @@ export default function TopBar() {
   return (
     <nav className="w-full sticky top-0 z-40 bg-[#f9f9fe]/90 backdrop-blur-md flex justify-between items-center py-4 mb-2">
       <div className="flex items-center gap-3">
-        <Link href="/profile" className="block">
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] hover:scale-105 transition-transform active:scale-95 shadow-sm">
-            <span className="text-sm font-black font-headline text-[#4b5b9a]">
-              {getInitials(userName)}
-            </span>
-          </div>
-        </Link>
+        <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] hover:scale-105 transition-transform active:scale-95 shadow-sm">
+          <span className="text-sm font-black font-headline text-[#4b5b9a]">
+            {getInitials(userName)}
+          </span>
+        </div>
 
         <div className="flex flex-col">
           <span className="text-[#94A3E8] font-headline font-extrabold text-lg tracking-tight leading-none">
             Chào, {userName}
           </span>
-          <span className="text-[10px] text-[#767681] font-bold uppercase tracking-widest mt-0.5">
+          {/* <span className="text-[10px] text-[#767681] font-bold uppercase tracking-widest mt-0.5">
             TIÊU TỈNH
-          </span>
+          </span> */}
         </div>
       </div>
 
@@ -66,7 +64,7 @@ export default function TopBar() {
         href="/notifications"
         className="relative text-[#94A3E8] hover:text-[#4b5b9a] transition-colors p-2 active:scale-95 duration-200"
       >
-        <span className="material-symbols-outlined text-2xl scale-150 block">
+        <span className="material-symbols-outlined text-2xl block">
           notifications
         </span>
 

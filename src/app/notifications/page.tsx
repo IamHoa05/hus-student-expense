@@ -23,18 +23,18 @@ interface NotificationItem {
 // 2. MOCK DATA: Danh sách thông báo
 // =======================================================================
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "n5",
-    type: "group_invite",
-    title: "Lời mời tham gia nhóm",
-    message: "Lê Anh Quân (u789) đã mời bạn tham gia nhóm 'Nhóm dự án AI'.",
-    time: "Vừa xong",
-    isRead: false,
-    icon: "group_add",
-    iconColor: "text-[#10b981]",
-    bgColor: "bg-[#d1f4e0]",
-    groupId: "g3", // ID của nhóm để gọi API
-  },
+  // {
+  //   id: "n5",
+  //   type: "group_invite",
+  //   title: "Lời mời tham gia nhóm",
+  //   message: "Lê Anh Quân (u789) đã mời bạn tham gia nhóm 'Nhóm dự án AI'.",
+  //   time: "Vừa xong",
+  //   isRead: false,
+  //   icon: "group_add",
+  //   iconColor: "text-[#10b981]",
+  //   bgColor: "bg-[#d1f4e0]",
+  //   groupId: "g3", // ID của nhóm để gọi API
+  // },
   {
     id: "n1",
     type: "alert",
@@ -117,36 +117,36 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <main className="flex-grow w-full max-w-md mx-auto bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen pb-32 relative">
-      {/* HEADER CỐ ĐỊNH TẠI TOP */}
-      <header className="fixed top-0 w-full max-w-md z-50 bg-[#f9f9fe]/90 backdrop-blur-xl border-b border-[#e2e2e7]/30">
-        <div className="flex justify-between items-center px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.back()}
-              className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95 flex items-center justify-center"
-            >
-              <span className="material-symbols-outlined text-xl">
-                arrow_back
-              </span>
-            </button>
-            <h1 className="font-headline font-bold text-xl tracking-tight text-[#4b5b9a]">
-              Thông báo
-            </h1>
-          </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={markAllAsRead}
-              className="text-xs font-bold text-[#4b5b9a] bg-[#dde1ff] px-3 py-1.5 rounded-full hover:bg-[#c4caff] transition-colors active:scale-95"
-            >
-              Đã đọc tất cả
-            </button>
-          )}
+    // SỬ DỤNG KHUNG CHUẨN CỦA TRANG PHÂN TÍCH
+    <main className="flex-grow w-full max-w-md mx-auto px-5 pt-4 pb-32 relative min-h-screen bg-[#f9f9fe] font-body text-[#1a1c1f]">
+      {/* HEADER NẰM TRONG DÒNG CHẢY (KHÔNG FIXED) */}
+      <header className="flex items-center justify-between pb-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95 flex items-center justify-center focus:outline-none outline-none"
+          >
+            <span className="material-symbols-outlined text-xl">
+              arrow_back
+            </span>
+          </button>
+          <h1 className="font-headline font-bold text-xl tracking-tight text-[#4b5b9a]">
+            Thông báo
+          </h1>
         </div>
+
+        {unreadCount > 0 && (
+          <button
+            onClick={markAllAsRead}
+            className="text-xs font-bold text-[#4b5b9a] bg-[#dde1ff] px-3 py-1.5 rounded-full hover:bg-[#c4caff] transition-colors active:scale-95 focus:outline-none outline-none"
+          >
+            Đã đọc tất cả
+          </button>
+        )}
       </header>
 
       {/* VÙNG NỘI DUNG CHÍNH */}
-      <div className="pt-24 px-6 space-y-4">
+      <div className="space-y-4 pt-2">
         {/* Tiêu đề & Couter Mới nhất */}
         <div className="flex items-center gap-2 mb-2">
           <h2 className="font-headline font-bold text-lg text-[#1a1c1f]">
@@ -181,32 +181,37 @@ export default function NotificationsPage() {
                   </span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-sm text-[#1a1c1f]">
-                    {note.title}
-                  </h3>
+                  <div className="flex justify-between items-start gap-2">
+                    <h3 className="font-bold text-sm text-[#1a1c1f]">
+                      {note.title}
+                    </h3>
+                    <span className="text-[9px] text-[#767681] whitespace-nowrap mt-0.5 font-medium">
+                      {note.time}
+                    </span>
+                  </div>
                   <p className="text-xs text-[#454650] mt-1 leading-relaxed">
                     {note.message}
                   </p>
 
                   {/* CÁC NÚT TƯƠNG TÁC CHO LỜI MỜI NHÓM */}
-                  {note.type === "group_invite" && (
+                  {/* {note.type === "group_invite" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-[#e2e2e7]/50">
                       <button
                         onClick={() =>
                           handleAcceptInvite(note.id, note.groupId)
                         }
-                        className="flex-1 bg-[#10b981] text-white text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#059669] active:scale-95 transition-all shadow-sm shadow-[#10b981]/20"
+                        className="flex-1 bg-[#10b981] text-white text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#059669] active:scale-95 transition-all shadow-sm shadow-[#10b981]/20 focus:outline-none outline-none"
                       >
                         Chấp nhận
                       </button>
                       <button
                         onClick={() => handleDeclineInvite(note.id)}
-                        className="flex-1 bg-[#f3f3f8] text-[#616470] text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#e2e2e7] hover:text-[#ba1a1a] active:scale-95 transition-all"
+                        className="flex-1 bg-[#f3f3f8] text-[#616470] text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#e2e2e7] hover:text-[#ba1a1a] active:scale-95 transition-all focus:outline-none outline-none"
                       >
                         Từ chối
                       </button>
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
             </div>
@@ -215,7 +220,7 @@ export default function NotificationsPage() {
 
         {/* TRẠNG THÁI RỖNG (Khi không có thông báo nào) */}
         {notifications.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-40 opacity-50 text-center animate-in fade-in duration-500">
+          <div className="flex flex-col items-center justify-center py-32 opacity-50 text-center animate-in fade-in duration-500">
             <span className="material-symbols-outlined text-6xl text-[#616470] mb-4">
               notifications_off
             </span>
