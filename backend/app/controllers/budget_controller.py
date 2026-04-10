@@ -83,3 +83,29 @@ async def get_spending_growth(
         "status": "success",
         "data": result
     }
+
+
+@router.get("/remaining")
+async def get_remaining_budget(
+    month: int | None = Query(default=None, ge=1, le=12),
+    year: int | None = Query(default=None, ge=1970, le=3000),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    """
+    API trả về tổng ngân sách còn lại và chi tiết theo danh mục cho tháng/năm.
+    Nếu không truyền month/year, mặc định lấy tháng/năm hiện tại.
+    """
+    today = date.today()
+    if month is None:
+        month = today.month
+    if year is None:
+        year = today.year
+
+    service = BudgetService(db)
+    result = await service.get_remaining_budget(current_user.user_id, month, year)
+
+    return {
+        "status": "success",
+        "data": result,
+    }

@@ -4,6 +4,19 @@ import React, { useState, useEffect } from "react";
 // Import TopBar vừa tạo
 import TopBar from "@/components/layout/TopBar";
 import Link from "next/link";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const getMonthRange = () => {
+  const now = new Date();
+  // Lấy ngày đầu tháng: Năm-Tháng-01
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    .toISOString().split('T')[0];
+  
+  // Lấy ngày cuối tháng: Năm-Tháng+1-Ngày 0
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    .toISOString().split('T')[0];
+
+  return { firstDay, lastDay };
+};
 
 // =======================================================================
 // 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU & MOCK DATA (Giữ nguyên của bạn)
@@ -35,6 +48,14 @@ interface ExpenseCategory {
   icon: string;
   iconBgClass: string;
   textHighlightClass: string;
+}
+
+interface RemainingData {
+  month: number;
+  year: number;
+  inflow_total?: number;
+  outflow_total?: number;
+  total_remaining: number;
 }
 
 const MOCK_BALANCE: BalanceData = {
@@ -116,10 +137,96 @@ const formatCurrency = (amount: number) => {
 // =======================================================================
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
+  const [monthlySummary, setMonthlySummary] = useState<RemainingData | null>(null);
+  const [loadingMonthly, setLoadingMonthly] = useState<boolean>(false);
+  const [monthlyError, setMonthlyError] = useState<string | null>(null);
+  interface ComparisonData {
+    current_month: { month: number; year: number; total: number };
+    previous_month: { month: number; year: number; total: number };
+    growth_rate: number;
+    is_increased: boolean;
+  }
+  const [comparison, setComparison] = useState<ComparisonData | null>(null);
+  const [loadingComparison, setLoadingComparison] = useState<boolean>(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 600);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const fetchMonthly = async () => {
+      setLoadingMonthly(true);
+      setMonthlyError(null);
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const headers: Record<string,string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${API_URL}/budgets/remaining`, {
+          method: 'GET',
+          credentials: 'include',
+          headers,
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.error('/budgets/remaining returned:', res.status, txt);
+          setMonthlyError('Không thể lấy dữ liệu ngân sách');
+          return;
+        }
+        const payload = await res.json();
+        const data = payload?.data ?? null;
+        if (data && typeof data.total_remaining !== 'undefined') {
+          setMonthlySummary(data as RemainingData);
+        } else {
+          setMonthlyError('Dữ liệu ngân sách không hợp lệ');
+        }
+      } catch (err) {
+        console.error('Lỗi khi gọi /budgets/remaining:', err);
+        setMonthlyError('Lỗi kết nối');
+      } finally {
+        setLoadingMonthly(false);
+      }
+    };
+
+    fetchMonthly();
+    // Fetch comparison at the same time
+    const fetchComparison = async () => {
+      setLoadingComparison(true);
+      setComparisonError(null);
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const headers: Record<string,string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${API_URL}/budgets/comparison`, {
+          method: 'GET',
+          credentials: 'include',
+          headers,
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.error('/budgets/comparison returned:', res.status, txt);
+          setComparisonError('Không thể lấy dữ liệu so sánh');
+          return;
+        }
+        const payload = await res.json();
+        const data = payload?.data ?? null;
+        if (data && typeof data.growth_rate !== 'undefined') {
+          setComparison(data as ComparisonData);
+        } else {
+          setComparisonError('Dữ liệu so sánh không hợp lệ');
+        }
+      } catch (err) {
+        console.error('Lỗi khi gọi /budgets/comparison:', err);
+        setComparisonError('Lỗi kết nối');
+      } finally {
+        setLoadingComparison(false);
+      }
+    };
+
+    fetchComparison();
   }, []);
 
   if (isLoading) {
@@ -148,25 +255,72 @@ export default function DashboardPage() {
               Khoản Dư
             </p>
             <h1 className="font-headline font-extrabold text-4xl tracking-tight">
-              {formatCurrency(MOCK_BALANCE.current)}
+              {loadingMonthly ? (
+                <span className="text-lg">Đang tải...</span>
+              ) : monthlySummary ? (
+                formatCurrency(monthlySummary.total_remaining)
+              ) : (
+                formatCurrency(MOCK_BALANCE.current)
+              )}
             </h1>
             <div className="mt-4 flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full w-fit backdrop-blur-md">
-              <span className="material-symbols-outlined text-sm">
-                trending_up
-              </span>
-              <span className="text-xs font-semibold">
-                +{MOCK_BALANCE.trendPercentage}% tháng này
-              </span>
+              {loadingComparison ? (
+                <span className="text-xs text-[#dde1ff]">Đang tải...</span>
+              ) : comparisonError ? (
+                <>
+                  <span className="material-symbols-outlined text-sm">trending_up</span>
+                  <span className="text-xs font-semibold">+{MOCK_BALANCE.trendPercentage}% tháng này</span>
+                </>
+              ) : comparison ? (
+                <>
+                  <span className={`material-symbols-outlined text-sm ${comparison.growth_rate > 0 ? 'text-[#ba1a1a]' : 'text-[#94a3e8]'}`}>
+                    {comparison.growth_rate > 0 ? 'trending_up' : 'trending_down'}
+                  </span>
+                  <span className="text-xs font-semibold">
+                    {comparison.growth_rate > 0 ? '+' : ''}{Number(comparison.growth_rate).toFixed(1)}% tháng này
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-sm">trending_up</span>
+                  <span className="text-xs font-semibold">+{MOCK_BALANCE.trendPercentage}% tháng này</span>
+                </>
+              )}
             </div>
           </div>
 
           <div className="z-10 grid grid-cols-2 gap-8 w-full pt-2 border-t border-white/20 mt-2">
             <div>
               <p className="font-body text-[10px] uppercase tracking-wider text-[#dde1ff] opacity-80 mb-1">
-                Chi tiêu
+                Chi tiêu (tháng này)
               </p>
               <p className="font-headline font-bold text-lg">
-                {formatCurrency(MOCK_BALANCE.expense)}
+                {loadingMonthly ? (
+                  <span className="text-sm text-[#dde1ff]">Đang tải...</span>
+                ) : monthlyError ? (
+                  formatCurrency(MOCK_BALANCE.expense)
+                ) : monthlySummary ? (
+                  formatCurrency(monthlySummary.outflow_total ?? MOCK_BALANCE.expense)
+                ) : (
+                  formatCurrency(MOCK_BALANCE.expense)
+                )}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-body text-[10px] uppercase tracking-wider text-[#dde1ff] opacity-80 mb-1">
+                Thu nhập
+              </p>
+              <p className="font-headline font-bold text-lg">
+                {loadingMonthly ? (
+                  <span className="text-sm text-[#dde1ff]">Đang tải...</span>
+                ) : monthlyError ? (
+                  formatCurrency(MOCK_BALANCE.income)
+                ) : monthlySummary ? (
+                  formatCurrency(monthlySummary.inflow_total ?? MOCK_BALANCE.income)
+                ) : (
+                  formatCurrency(MOCK_BALANCE.income)
+                )}
               </p>
             </div>
           </div>

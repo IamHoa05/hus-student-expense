@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // 1. Định nghĩa Hạng mục mở rộng
 const CATEGORIES = [
@@ -33,11 +34,60 @@ interface ProductItem {
 export default function AddTransactionPage() {
   const router = useRouter();
 
+  // State mới để chứa categories từ Backend
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 2. Hàm gọi API lấy danh sách hạng mục
+  // 2. Hàm gọi API lấy danh sách hạng mục
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch(`${API_URL}/categories/`, {
+          method: "GET",
+          credentials: "include", 
+        });
+
+        if (response.ok) {
+          // Bước 1: Phải đợi lấy data xong đã
+          const data = await response.json();
+
+          // Bước 2: Sau đó mới map để gán icon từ Frontend vào
+          const finalData = data.map((backendCat: any) => {
+            const frontendInfo = CATEGORIES.find(
+              (f) => f.name.toLowerCase() === backendCat.name.toLowerCase()
+            );
+            return {
+              ...backendCat,
+              icon: frontendInfo ? frontendInfo.icon : "category" 
+            };
+          });
+
+          // Bước 3: Cập nhật vào state
+          setCategories(finalData);
+
+          // Nếu có dữ liệu, set mặc định là hạng mục đầu tiên
+          if (finalData.length > 0) {
+            setSelectedCategory(finalData[0].category_id.toString());
+          }
+        }
+      } catch (error) {
+        console.error("Lỗi lấy categories:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
   // States cơ bản
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
     "expense"
   );
-  const [selectedCategory, setSelectedCategory] = useState<string>("c1");
+  // Thêm state để chuyển đổi giữa nhập "Tổng tiền" (thủ công) và "Chi tiết" (OCR/Từng món)
+  const [isManualMode, setIsManualMode] = useState(true);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [date, setDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -76,6 +126,7 @@ export default function AddTransactionPage() {
   const removeProduct = (id: number) =>
     setProducts(products.filter((p) => p.id !== id));
 
+  
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -93,28 +144,62 @@ export default function AddTransactionPage() {
     }
   };
 
-  // Logic Xử lý khi Lưu giao dịch
-  const handleSave = () => {
-    let message = `Đã ghi nhận giao dịch ${new Intl.NumberFormat(
-      "vi-VN"
-    ).format(totalAmount)}đ!\n`;
+  const handleSave = async () => {
+    if (totalAmount <= 0) return alert("Vui lòng nhập số tiền!");
 
-    // Xử lý lưu hạng mục tự tạo
-    if (customCategory.trim() !== "") {
-      message += `\n✅ Hạng mục mới "${customCategory}" đã được lưu vào CSDL để hiển thị ở Dashboard & Phân tích.`;
-    }
+    const isIncome = transactionType === "income";
 
-    // Xử lý logic chia tiền nhóm
-    if (transactionType === "expense" && selectedCategory === "group") {
-      if (isAdvancePayment) {
-        message += `\n✅ Đã ghi nhận bạn ỨNG TRƯỚC cho nhóm "${activeGroup.name}". (Sẽ chia đều cho ${activeGroup.members} người).`;
+    // CHUẨN BỊ PAYLOAD
+    const payload = {
+      amount: totalAmount,
+      // Nếu là Thu nhập -> Fix cứng 11. Nếu là Chi tiêu -> Lấy ID Hòa đã chọn từ API
+      category_id: isIncome ? 11 : parseInt(selectedCategory), 
+      note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
+      transaction_date: date + "T00:00:00",
+      // Đổi type tương ứng cho Backend
+      type: isIncome ? "inflow" : "outflow",
+      // Nếu là khoản chi, Hòa có thể gửi kèm mảng products nếu Backend yêu cầu chi tiết
+      items: isIncome ? [] : products.map(p => ({
+        name: p.name || "Sản phẩm không tên",
+        quantity: p.qty,
+        price: p.price
+      }))
+    };
+
+    // CHỌN ĐÚNG LINK API
+    const endpoint = isIncome ? "/transactions/incomes" : "/transactions/expenses";
+
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // Giữ nguyên để gửi Cookie
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Đã lưu ${isIncome ? "khoản thu" : "khoản chi"} thành công!`);
+        router.push("/dashboard");
       } else {
-        message += `\n✅ Đã trừ thẳng vào quỹ chung của nhóm "${activeGroup.name}".`;
+        // Việt hóa lỗi từ Backend để Hòa dễ đọc
+        const errorMsg = result.detail || "Có lỗi xảy ra khi lưu.";
+        alert(`❌ Lỗi từ Backend: ${typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)}`);
       }
+    } catch (error) {
+      console.error("Lỗi fetch:", error);
+      alert("❌ Lỗi kết nối đến Server!");
     }
+  };
 
-    alert(message);
-    router.push("/dashboard");
+// Hàm xử lý khi người dùng nhập nhanh số tiền tổng
+  const handleQuickAmountChange = (value: string) => {
+    const amount = parseInt(value) || 0;
+    // Cập nhật vào mảng products để logic tính totalAmount không bị sai
+    setProducts([
+      { id: Date.now(), name: note || "Giao dịch thủ công", qty: 1, price: amount }
+    ]);
   };
 
   return (
@@ -270,33 +355,61 @@ export default function AddTransactionPage() {
                   + Thêm
                 </button>
               </div>
-
+                    {isManualMode ? (
+                /* GIAO DIỆN NHẬP NHANH SỐ TIỀN TỔNG */
+                <div className="py-4 space-y-2">
+                  <div className="relative flex items-center border-b-2 border-[#4b5b9a]/20 pb-2 focus-within:border-[#4b5b9a] transition-all">
+                    <span className="text-3xl font-black text-[#4b5b9a] mr-3">₫</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      className="w-full bg-transparent border-none p-0 text-5xl font-headline font-black text-[#1a1c1f] focus:ring-0 placeholder:text-[#e2e2e7]"
+                      onChange={(e) => handleQuickAmountChange(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-[10px] text-[#767681] italic">
+                    * Nhập nhanh số tiền bạn đã chi mà không cần hóa đơn
+                  </p>
+                </div>
+              ) : (
+                /* GIAO DIỆN DANH SÁCH SẢN PHẨM (Code cũ của bạn) */
+                <div className="space-y-3">
+                  {products.map((p) => (
+                    <div key={p.id} className="p-4 bg-[#f3f3f8] rounded-2xl space-y-3">
+                      {/* ... Render từng input name, qty, price như cũ ... */}
+                    </div>
+                  ))}
+                  <button onClick={addProduct} className="...">+ Thêm món lẻ</button>
+                </div>
+              )}
               {/* Hạng mục */}
               <div className="pt-4 border-t border-[#f3f3f8] space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#4b5b9a] tracking-widest">
                   Chọn hạng mục chi tiêu
                 </p>
                 <div className="grid grid-cols-3 gap-2">
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
-                        selectedCategory === cat.id
-                          ? cat.id === "group"
-                            ? "bg-[#dde1ff] text-[#4b5b9a] border border-[#4b5b9a]/20"
-                            : "bg-[#4b5b9a] text-white"
-                          : "bg-[#f3f3f8] text-[#454650]"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-lg">
-                        {cat.icon}
-                      </span>
-                      <span className="text-[10px] font-bold truncate">
-                        {cat.name}
-                      </span>
-                    </button>
-                  ))}
+                  {loading ? (
+                    <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">Đang tải hạng mục...</p>
+                  ) : (
+                    categories.map((cat) => (
+                      <button
+                        key={cat.category_id}
+                        onClick={() => setSelectedCategory(cat.category_id.toString())}
+                        className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
+                          selectedCategory === cat.category_id.toString()
+                            ? "bg-[#4b5b9a] text-white"
+                            : "bg-[#f3f3f8] text-[#454650]"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">
+                          {cat.icon || "category"} {/* Dùng icon từ BE, nếu không có dùng mặc định */}
+                        </span>
+                        <span className="text-[10px] font-bold truncate">
+                          {cat.name}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
                 <input
                   type="text"
@@ -379,6 +492,7 @@ export default function AddTransactionPage() {
           </>
         )}
 
+       
         {/* --- GIAO DIỆN KHOẢN THU --- */}
         {transactionType === "income" && (
           <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-[#e2e2e7]/50 space-y-8 animate-in fade-in duration-500">

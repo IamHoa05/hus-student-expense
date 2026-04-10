@@ -20,21 +20,18 @@ async def seed_categories():
     # Cập nhật danh sách với transaction_type chuẩn: inflow/outflow
     categories = [
         # Nhóm Chi tiêu (outflow)
-        {"name": "Làm đẹp", "type": "outflow"},
-        {"name": "Vật nuôi", "type": "outflow"},
-        {"name": "Quà tặng", "type": "outflow"},
-        {"name": "Phòng ở", "type": "outflow"},
         {"name": "Ăn uống", "type": "outflow"},
         {"name": "Học tập", "type": "outflow"},
         {"name": "Di chuyển", "type": "outflow"},
+        {"name": "Dịch vụ", "type": "outflow"},
+        {"name": "Mua sắm", "type": "outflow"},
+        {"name": "Giải trí", "type": "outflow"},
+        {"name": "Cố định", "type": "outflow"},
+        {"name": "Nhóm", "type": "outflow"},
         {"name": "Khác", "type": "outflow"},
         
         # Nhóm Thu nhập (inflow)
-        {"name": "Lương", "type": "inflow"},
-        {"name": "Tiền bố mẹ cho", "type": "inflow"},
-        {"name": "Học bổng", "type": "inflow"},
-        {"name": "Làm thêm", "type": "inflow"},
-        {"name": "Bán đồ cũ", "type": "inflow"}
+        {"name": "Thu nhập", "type": "inflow"},
     ]
 
     async with AsyncSessionLocal() as session:

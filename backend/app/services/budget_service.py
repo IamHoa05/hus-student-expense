@@ -115,6 +115,54 @@ class BudgetService:
 
         # Sắp xếp theo phần trăm tiêu nhiều nhất lên đầu giống UI của bạn
         return sorted(allocation_data, key=lambda x: x['percentage'], reverse=True)
+
+    async def get_remaining_budget(self, user_id: int, month: int, year: int):
+        """
+        Trả về tổng ngân sách còn lại và danh sách phân bổ theo danh mục
+        cho tháng và năm được yêu cầu.
+        """
+        # Tính tổng inflow và outflow trong tháng (không dùng get_budget_allocation)
+        # Xác định khoảng thời gian của tháng
+        first_day = date(year, month, 1)
+        _, last_day = calendar.monthrange(year, month)
+        last_date = date(year, month, last_day)
+
+        start_dt = datetime.combine(first_day, time.min)
+        end_dt = datetime.combine(last_date, time.max)
+
+        inflow_stmt = select(func.sum(Transaction.total_amount)).where(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == 'inflow',
+                Transaction.transaction_date >= start_dt,
+                Transaction.transaction_date <= end_dt,
+            )
+        )
+        outflow_stmt = select(func.sum(Transaction.total_amount)).where(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == 'outflow',
+                Transaction.transaction_date >= start_dt,
+                Transaction.transaction_date <= end_dt,
+            )
+        )
+
+        inflow_res = await self.db.execute(inflow_stmt)
+        outflow_res = await self.db.execute(outflow_stmt)
+
+        inflow_total = float(inflow_res.scalar() or 0)
+        outflow_total = float(outflow_res.scalar() or 0)
+
+        total_remaining = inflow_total - outflow_total
+
+        return {
+            "month": month,
+            "year": year,
+            "inflow_total": inflow_total,
+            "outflow_total": outflow_total,
+            "total_remaining": total_remaining,
+            "allocations": [],
+        }
     
    
 

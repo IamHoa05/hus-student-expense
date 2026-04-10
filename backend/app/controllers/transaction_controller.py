@@ -4,12 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..middleware.auth import require_user
 from ..config.database import get_db
-from ..schemas.transaction import TransactionCreateSchema, IncomeCreateSchema
+from ..schemas.transaction import TransactionCreateSchema, IncomeCreateSchema, ExpenseCreateSchema
 from ..services.transaction_service import TransactionService # Sửa lỗi typo trasaction_service
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
-@router.post("/expenses", status_code=status.HTTP_201_CREATED)
+@router.post("/expenses_ocr", status_code=status.HTTP_201_CREATED)
 async def create_transaction(
     payload: TransactionCreateSchema, 
     db: AsyncSession = Depends(get_db),
@@ -38,5 +38,24 @@ async def create_income(
     return {
         "status": "success",
         "message": "Đã lưu khoản thu mới",
+        "data": {"transaction_id": result_id}
+    }
+
+@router.post("/expenses", status_code=201)
+async def create_expense(
+    payload: ExpenseCreateSchema, # Bạn tạo thêm Schema này hoặc dùng chung với Income
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    """
+    API lưu khoản chi tiêu (Ăn uống, Học tập, Mua sắm...)
+    """
+    service = TransactionService(db)
+    # Logic xử lý cho outflow
+    result_id = await service.create_expense(current_user.user_id, payload)
+    
+    return {
+        "status": "success",
+        "message": "Đã lưu khoản chi tiêu mới",
         "data": {"transaction_id": result_id}
     }

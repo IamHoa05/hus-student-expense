@@ -106,4 +106,33 @@ class IncomeCreateSchema(BaseModel):
             }
         }
 
+class ExpenseCreateSchema(BaseModel):
+    category_id: int
+    amount: float = Field(..., gt=0)
+    type: TransactionType = Field(..., description="Loại giao dịch: INCOME hoặc EXPENSE")
+    transaction_date: datetime = Field(default_factory=datetime.now)
+    note: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "category_id": 1,
+                "amount": 50000.0,
+                "type": "outflow",
+                "transaction_date": "2026-03-30T15:00:00",
+                "note": "Tiền trợ cấp tháng 3"
+            }
+        }
+# Cấu hình để hiển thị ví dụ trong Swagger UI
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "category_id": 1,
+                "amount": 50000.0,
+                "type": "outflow",
+                "transaction_date": "2026-03-30T15:00:00",
+                "note": "Tiền mua trà sữa"
+            }
+        }
+
 

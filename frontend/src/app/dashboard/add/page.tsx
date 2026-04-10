@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+
 // Danh sách các biểu tượng mục tiêu
 const GOAL_ICONS = [
   { id: "icon_phone", icon: "smartphone" },
@@ -82,6 +83,7 @@ export default function AddGoalPage() {
             Momentum sẽ đồng hành cùng bạn trên hành trình chinh phục những cột
             mốc mới.
           </p>
+          
         </section>
 
         {/* Goal Form */}

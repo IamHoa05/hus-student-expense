@@ -2,6 +2,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from typing import Optional
+from typing import List
 
 from enum import Enum
 
@@ -34,3 +35,10 @@ class BudgetAllocationResponse(BaseModel):
     spent_amount: float
     percentage: float  # (spent / limit) * 100
     remaining_amount: float # Số tiền còn lại được tiêu
+
+
+class RemainingBudgetResponse(BaseModel):
+    month: int
+    year: int
+    total_remaining: float
+    allocations: List[BudgetAllocationResponse]
