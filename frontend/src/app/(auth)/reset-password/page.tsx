@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
           // Xử lý lỗi validate từ FastAPI (mảng object)
           const err = data.detail[0];
           if (err.type === "value_error.missing") msg = "Đừng để trống mật khẩu nhé.";
-          else msg = "Dữ liệu không hợp lệ, Hòa kiểm tra lại nhé.";
+          else msg = "Dữ liệu không hợp lệ, kiểm tra lại nhé.";
         }
         setErrorMsg(msg);
       }

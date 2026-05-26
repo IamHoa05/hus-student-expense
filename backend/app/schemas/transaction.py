@@ -1,138 +1,108 @@
-# app/schemas/transaction.py
-from pydantic import BaseModel, HttpUrl, Field, field_validator
-from enum import Enum
+from pydantic import BaseModel, Field, field_validator, field_serializer
 from typing import Optional, Any
 from decimal import Decimal
 from datetime import datetime
+from enum import Enum
+from zoneinfo import ZoneInfo
 
-# --- SCHEMAS CHO BUDGET ---
-class BudgetBase(BaseModel):
-    amount_limit: Decimal
-    period: str  # "Monthly" hoặc "Semester"
+class TransactionType(str, Enum):
+    INFLOW = "inflow"
+    OUTFLOW = "outflow"
 
-class BudgetCreate(BudgetBase):
-    user_id: int
+class TransactionSource(str, Enum):
+    MANUAL = "manual"
+    OCR = "ocr"
 
-class BudgetResponse(BudgetBase):
-    id: int
-    user_id: int
+class TransactionCreateSchema(BaseModel):
+    amount: Decimal = Field(..., gt=0)
+    transaction_type: TransactionType = Field(default=TransactionType.OUTFLOW)
+    transaction_date: datetime = Field(
+        default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    )
+    category_id: int
+    note: Optional[str] = Field(None, max_length=500)
+    source: TransactionSource = Field(default=TransactionSource.MANUAL)
 
-    class Config:
-        from_attributes = True # Giúp Pydantic hiểu được dữ liệu từ SQLAlchemy
+    @field_validator('transaction_date', mode='after')
+    @classmethod
+    def convert_to_vn_time(cls, v: datetime) -> datetime:
+        if v:
+            return v.astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
+        return v
 
-# --- SCHEMAS CHO RECEIPT (Kết quả OCR) ---
-class ReceiptBase(BaseModel):
-    image_url: str
-    raw_text: Optional[str] = None
 
-class ReceiptCreate(ReceiptBase):
-    transaction_id: Optional[int] = None
+class TransactionResponseSchema(BaseModel):
+    transaction_id: int
+    category_id: int
+    amount: Decimal
+    transaction_type: TransactionType
+    transaction_date: datetime = Field(serialization_alias='created_at')  # ✅ trả về key "created_at"
+    icon: Optional[str] = None
+    category_name: Optional[str] = None
+    is_settled: bool = False
+    note: Optional[str] = None
+    source: TransactionSource = Field(default=TransactionSource.MANUAL)
 
-class ReceiptResponse(ReceiptBase):
-    id: int
-    transaction_id: Optional[int]
+    @field_serializer('transaction_date')
+    def serialize_dt(self, dt: datetime, _info):
+        if dt:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+            vn_dt = dt.astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
+            return vn_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+        return None
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
-# --- SCHEMA ĐẶC BIỆT KHI SCAN XONG ---
-# Khi Vintern đọc xong, nó trả về thông tin này cho điện thoại xác nhận
-class OCRScanResponse(BaseModel):
-    status: str
-    shop_name: Optional[str] = "Không xác định"
+class TransactionUpdateSchema(BaseModel):
+    amount: Optional[Decimal] = Field(None, gt=0)
+    transaction_type: Optional[TransactionType] = None
+    transaction_date: Optional[datetime] = None
+    category_id: Optional[int] = None
+    note: Optional[str] = None
+    store_name: Optional[str] = None
+    payment_method: Optional[str] = None
+    location: Optional[str] = None
+    tags: Optional[list[str]] = None
+
+class TransactionsByDateSchema(BaseModel):
+    date: str  # "2026-05-26"
+    transactions: list[TransactionResponseSchema]
+
+class TransactionsGroupedResponseSchema(BaseModel):
+    status: str = "success"
+    data: list[TransactionsByDateSchema]
+
+class TransactionDetailResponseSchema(BaseModel):
+    transaction_id: int
+    category_id: int
     amount: Decimal
-    date: Optional[str] = None
-    raw_text: str
-
-# Định nghĩa Enum để tránh nhập sai loại giao dịch
-class TransactionType(str, Enum):
-    INCOME = "inflow"   # Khoản thu
-    EXPENSE = "outflow" # Khoản chi
-
-class TransactionCreateSchema(BaseModel):
-    # --- 1. Thông tin cốt lõi (Bảng Transaction) ---
-    amount: Decimal = Field(..., gt=0, description="Số tiền giao dịch")
-    type: TransactionType = Field(default=TransactionType.EXPENSE)
-    transaction_date: datetime = Field(default_factory=datetime.now)
-    category_id: int = Field(..., description="ID danh mục chi tiêu")
-    group_id: Optional[int] = Field(None, description="ID nhóm nếu là chi tiêu chung")
-
-    # --- 2. Thông tin chi tiết (Bảng TransactionDetail) ---
-    note: Optional[str] = Field(None, max_length=500, description="Ghi chú chi tiết")
-    store_name: Optional[str] = Field(None, max_length=100, description="Tên cửa hàng (VinMart, Circle K...)")
-    payment_method: Optional[str] = Field(None, description="Tiền mặt, Chuyển khoản, Ví điện tử...")
-    location: Optional[str] = Field(None, description="Địa chỉ nơi tiêu tiền")
-
-    # --- 3. Thông tin Media & AI (Bảng TransactionMedia) ---
-    image_url: Optional[str] = Field(None, description="Link ảnh hóa đơn từ Cloud")
-    ocr_raw: Optional[dict[str, Any]] = Field(None, description="Dữ liệu thô từ AI quét hóa đơn")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "amount": 55000.0,
-                "type": "outflow",
-                "transaction_date": "2026-04-01T12:30:00",
-                "category_id": 1,
-                "group_id": None,
-                "note": "Mua 1 bát phở và 1 trà đá",
-                "store_name": "Phở Thìn Lò Đúc",
-                "payment_method": "Chuyển khoản (Vietcombank)",
-                "location": "13 Lò Đúc, Hai Bà Trưng, Hà Nội",
-                "image_url": "https://storage.google.com/bills/2026/abc-123.jpg",
-                "ocr_raw": {"vendor": "Pho Thin", "total": 55000, "confidence": 0.98}
-            }
-        }
-class MediaSchema(BaseModel):
-    image_url: str
-    ocr_raw: Optional[dict] = None # Lưu kết quả JSON từ AI vào đây
-
-class IncomeCreateSchema(BaseModel):
-    category_id: int
-    amount: float = Field(..., gt=0)
-    type: TransactionType = Field(..., description="Loại giao dịch: INCOME hoặc EXPENSE")
-    transaction_date: datetime = Field(default_factory=datetime.now)
+    transaction_type: TransactionType
+    transaction_date: datetime
+    source: TransactionSource
+    icon: Optional[str] = None
+    category_name: Optional[str] = None
+    is_settled: bool = False
+    # TransactionDetail fields
     note: Optional[str] = None
+    store_name: Optional[str] = None
+    payment_method: Optional[str] = None
+    location: Optional[str] = None
+    tags: Optional[list[str]] = None
+    # TransactionMedia fields
+    image_url: Optional[str] = None
+    ocr_raw: Optional[dict] = None
 
-# Cấu hình để hiển thị ví dụ trong Swagger UI
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "category_id": 1,
-                "amount": 50000.0,
-                "type": "inflow",
-                "transaction_date": "2026-03-30T15:00:00",
-                "note": "Tiền trợ cấp tháng 3"
-            }
-        }
-
-class ExpenseCreateSchema(BaseModel):
-    category_id: int
-    amount: float = Field(..., gt=0)
-    type: TransactionType = Field(..., description="Loại giao dịch: INCOME hoặc EXPENSE")
-    transaction_date: datetime = Field(default_factory=datetime.now)
-    note: Optional[str] = None
+    @field_serializer('transaction_date')
+    def serialize_dt(self, dt: datetime, _info):
+        if dt:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+            vn_dt = dt.astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
+            return vn_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+        return None
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "category_id": 1,
-                "amount": 50000.0,
-                "type": "outflow",
-                "transaction_date": "2026-03-30T15:00:00",
-                "note": "Tiền trợ cấp tháng 3"
-            }
-        }
-# Cấu hình để hiển thị ví dụ trong Swagger UI
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "category_id": 1,
-                "amount": 50000.0,
-                "type": "outflow",
-                "transaction_date": "2026-03-30T15:00:00",
-                "note": "Tiền mua trà sữa"
-            }
-        }
-
-
+        from_attributes = True

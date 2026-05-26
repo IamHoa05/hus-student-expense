@@ -34,8 +34,9 @@ interface ProductItem {
 export default function AddTransactionPage() {
   const router = useRouter();
 
-  // State mới để chứa categories từ Backend
-  const [categories, setCategories] = useState<any[]>([]);
+  // State mới để chứa categories từ Backend (phân tách thu / chi)
+  const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 2. Hàm gọi API lấy danh sách hạng mục
@@ -43,33 +44,45 @@ export default function AddTransactionPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await fetch(`${API_URL}/categories/`, {
-          method: "GET",
-          credentials: "include",
-        });
+        // Fetch expense (outflow) and income (inflow) in parallel
+        const [resOut, resIn] = await Promise.all([
+          fetch(`${API_URL}/categories?type=outflow`, {
+            credentials: "include",
+          }),
+          fetch(`${API_URL}/categories?type=inflow`, {
+            credentials: "include",
+          }),
+        ]);
 
-        if (response.ok) {
-          // Bước 1: Phải đợi lấy data xong đã
-          const data = await response.json();
+        const outData = resOut.ok ? await resOut.json() : [];
+        const inData = resIn.ok ? await resIn.json() : [];
 
-          // Bước 2: Sau đó mới map để gán icon từ Frontend vào
-          const finalData = data.map((backendCat: any) => {
-            const frontendInfo = CATEGORIES.find(
-              (f) => f.name.toLowerCase() === backendCat.name.toLowerCase()
-            );
-            return {
-              ...backendCat,
-              icon: frontendInfo ? frontendInfo.icon : "category",
-            };
-          });
+        const mapIcon = (backendCat: any) => {
+          const backendName =
+            backendCat.name ?? backendCat.category_name ?? "";
+          const frontendInfo = CATEGORIES.find(
+            (f) => f.name.toLowerCase() === backendName.toLowerCase(),
+          );
+          const chosenIcon = backendCat.icon || frontendInfo?.icon || "category";
+          return {
+            ...backendCat,
+            name: backendName,
+            icon: chosenIcon,
+          };
+        };
 
-          // Bước 3: Cập nhật vào state
-          setCategories(finalData);
+        const finalOut = Array.isArray(outData) ? outData.map(mapIcon) : [];
+        const finalIn = Array.isArray(inData) ? inData.map(mapIcon) : [];
 
-          // Nếu có dữ liệu, set mặc định là hạng mục đầu tiên
-          if (finalData.length > 0) {
-            setSelectedCategory(finalData[0].category_id.toString());
-          }
+        setExpenseCategories(finalOut);
+        setIncomeCategories(finalIn);
+
+        // Set default selectedCategory based on current transaction type
+        if (transactionType === "expense" && finalOut.length > 0) {
+          setSelectedCategory(finalOut[0].category_id.toString());
+        }
+        if (transactionType === "income" && finalIn.length > 0) {
+          setSelectedCategory(finalIn[0].category_id.toString());
         }
       } catch (error) {
         console.error("Lỗi lấy categories:", error);
@@ -82,14 +95,14 @@ export default function AddTransactionPage() {
   }, []);
   // States cơ bản
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
-    "expense"
+    "expense",
   );
   // Thêm state để chuyển đổi giữa nhập "Tổng tiền" (thủ công) và "Chi tiết" (OCR/Từng món)
   const [isManualMode, setIsManualMode] = useState(true);
 
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [date, setDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [note, setNote] = useState<string>("");
   const [customCategory, setCustomCategory] = useState("");
@@ -107,6 +120,17 @@ export default function AddTransactionPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
 
+  // Khi người dùng chuyển giữa 'expense' và 'income', set default selectedCategory
+  useEffect(() => {
+    if (transactionType === "expense") {
+      if (expenseCategories.length > 0)
+        setSelectedCategory(expenseCategories[0].category_id.toString());
+    } else {
+      if (incomeCategories.length > 0)
+        setSelectedCategory(incomeCategories[0].category_id.toString());
+    }
+  }, [transactionType, expenseCategories, incomeCategories]);
+
   // Tính tổng tiền
   const totalAmount = useMemo(() => {
     return products.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -120,7 +144,7 @@ export default function AddTransactionPage() {
     setProducts([...products, { id: Date.now(), name: "", qty: 1, price: 0 }]);
   const updateProduct = (id: number, field: keyof ProductItem, value: any) => {
     setProducts(
-      products.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+      products.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
     );
   };
   const removeProduct = (id: number) =>
@@ -148,11 +172,15 @@ export default function AddTransactionPage() {
 
     const isIncome = transactionType === "income";
 
+    // Bắt buộc chọn hạng mục
+    if (!selectedCategory)
+      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
+
     // CHUẨN BỊ PAYLOAD
     const payload = {
       amount: totalAmount,
-      // Nếu là Thu nhập -> Fix cứng 11. Nếu là Chi tiêu -> Lấy ID Hòa đã chọn từ API
-      category_id: isIncome ? 11 : parseInt(selectedCategory),
+      // Dùng category id đã chọn cho cả thu và chi
+      category_id: parseInt(selectedCategory),
       note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
       transaction_date: date + "T00:00:00",
       // Đổi type tương ứng cho Backend
@@ -167,17 +195,19 @@ export default function AddTransactionPage() {
           })),
     };
 
-    // CHỌN ĐÚNG LINK API
-    const endpoint = isIncome
-      ? "/transactions/incomes"
-      : "/transactions/expenses";
-
+    // Gọi API chung của backend: POST /transactions
     try {
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetch(`${API_URL}/transactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // Giữ nguyên để gửi Cookie
-        body: JSON.stringify(payload),
+        credentials: "include",
+        body: JSON.stringify({
+          amount: payload.amount,
+          transaction_type: payload.type || (isIncome ? "inflow" : "outflow"),
+          transaction_date: payload.transaction_date,
+          category_id: payload.category_id,
+          note: payload.note,
+        }),
       });
 
       const result = await response.json();
@@ -191,7 +221,7 @@ export default function AddTransactionPage() {
         alert(
           `❌ Lỗi từ Backend: ${
             typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
-          }`
+          }`,
         );
       }
     } catch (error) {
@@ -348,7 +378,7 @@ export default function AddTransactionPage() {
                             updateProduct(
                               p.id,
                               "price",
-                              parseInt(e.target.value)
+                              parseInt(e.target.value),
                             )
                           }
                           className="w-20 text-right bg-transparent border-none p-0 text-sm font-black text-[#4b5b9a] focus:ring-0"
@@ -412,7 +442,10 @@ export default function AddTransactionPage() {
                       Đang tải hạng mục...
                     </p>
                   ) : (
-                    categories.map((cat) => (
+                    (transactionType === "expense"
+                      ? expenseCategories
+                      : incomeCategories
+                    ).map((cat: any) => (
                       <button
                         key={cat.category_id}
                         onClick={() =>
@@ -506,7 +539,7 @@ export default function AddTransactionPage() {
                   </p>
                   <p className="text-sm font-black text-[#4b5b9a]">
                     {new Intl.NumberFormat("vi-VN").format(
-                      totalAmount / activeGroup.members
+                      totalAmount / activeGroup.members,
                     )}
                     đ/ng
                   </p>
@@ -542,6 +575,40 @@ export default function AddTransactionPage() {
                     ])
                   }
                 />
+              </div>
+              {/* Hạng mục cho Khoản thu */}
+              <div className="pt-2 border-t border-[#f3f3f8] space-y-4">
+                <p className="text-[10px] font-black uppercase text-[#10b981] tracking-widest">
+                  Chọn hạng mục thu nhập
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {loading ? (
+                    <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">
+                      Đang tải hạng mục...
+                    </p>
+                  ) : (
+                    incomeCategories.map((cat: any) => (
+                      <button
+                        key={cat.category_id}
+                        onClick={() =>
+                          setSelectedCategory(cat.category_id.toString())
+                        }
+                        className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
+                          selectedCategory === cat.category_id.toString()
+                            ? "bg-[#10b981] text-white"
+                            : "bg-[#f3f3f8] text-[#454650]"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">
+                          {cat.icon || "category"}
+                        </span>
+                        <span className="text-[10px] font-bold truncate">
+                          {cat.name}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -594,8 +661,8 @@ export default function AddTransactionPage() {
             totalAmount <= 0
               ? "bg-[#c6c5d1] text-white"
               : transactionType === "expense"
-              ? "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/30"
-              : "bg-[#10b981] text-white shadow-[#10b981]/30"
+                ? "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/30"
+                : "bg-[#10b981] text-white shadow-[#10b981]/30"
           }`}
         >
           {selectedCategory === "group" && transactionType === "expense"

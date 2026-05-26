@@ -1,5 +1,8 @@
 import pyotp
 from ..config.settings import settings
 
-def create_otp():
-    return pyotp.TOTP(pyotp.random_base32(), interval=settings.RESET_PASSWORD_TOKEN_EXPIRE_MINUTES * 60).now()
+import secrets
+
+def create_otp() -> str:
+    """Tạo mã OTP 6 chữ số ngẫu nhiên"""
+    return str(secrets.randbelow(900000) + 100000)  # Luôn đủ 6 chữ số

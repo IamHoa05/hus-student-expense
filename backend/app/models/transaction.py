@@ -1,55 +1,58 @@
-
-from sqlalchemy import Column, String, ForeignKey, DECIMAL, TIMESTAMP, Integer, Text, Boolean, DateTime
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-import uuid
-import datetime
+from sqlalchemy import Column, String, ForeignKey, DECIMAL, Integer, Text, Boolean, DateTime, Enum, Index
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from app.config.database import Base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from app.models.category import TransactionType
+import enum
+
+class TransactionSource(str, enum.Enum):
+    MANUAL = "manual"
+    OCR = "ocr"
 
 class Transaction(Base):
     __tablename__ = "transaction"
     transaction_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("user.user_id")) # Người tạo giao dịch
-    group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True) # Nếu NULL là tiêu cá nhân
-    category_id = Column(Integer, ForeignKey("category.category_id")) # Thuộc danh mục nào
-    total_amount = Column(DECIMAL(15, 2), nullable=False) # Tổng số tiền trên hóa đơn
-    transaction_type = Column(String) # 'inflow' (Thu nhập) hoặc 'outflow' (Chi tiêu)
-    transaction_date = Column(DateTime, nullable=False) # Ngày ghi trên hóa đơn (không phải ngày tạo)
+    user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("category.category_id"), nullable=True)
+    ai_category_id = Column(Integer, ForeignKey("category.category_id"), nullable=True)
+    total_amount = Column(DECIMAL(15, 2), nullable=False)
+    transaction_type = Column(Enum(TransactionType), nullable=False)
+    transaction_date = Column(DateTime, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
-    
-    # Relationships
-    user = relationship("User", back_populates="transactions") # Khớp với User.transactions
-    group = relationship("Group", back_populates="transactions") # Khớp với Group.transactions
-    category = relationship("Category", back_populates="transactions") # Khớp với Category.transactions
-    
-    # Quan hệ 1-1 với các bảng mở rộng
+    updated_at = Column(DateTime, onupdate=func.now())
+    source = Column(Enum(TransactionSource), nullable=False, default=TransactionSource.MANUAL)  # ✅
+
+    __table_args__ = (
+        Index('ix_transaction_user_date', 'user_id', 'transaction_date'),
+        Index('ix_transaction_category', 'category_id'),
+        Index('ix_transaction_type', 'transaction_type'),
+    )
+
+    user = relationship("User", back_populates="transactions")
+    category = relationship("Category", foreign_keys=[category_id])        # ✅ bỏ back_populates
+    ai_category = relationship("Category", foreign_keys=[ai_category_id])
     details = relationship("TransactionDetail", back_populates="transaction", uselist=False, cascade="all, delete-orphan")
     media = relationship("TransactionMedia", back_populates="transaction", uselist=False, cascade="all, delete-orphan")
-    split = relationship("ExpenseSplit", back_populates="transaction", uselist=False, cascade="all, delete-orphan")
+
 
 class TransactionDetail(Base):
     __tablename__ = "transaction_details"
     transaction_id = Column(Integer, ForeignKey("transaction.transaction_id", ondelete="CASCADE"), primary_key=True)
-    store_name = Column(String) # Tên cửa hàng (VinMart, Circle K...)
-    note = Column(Text) # Ghi chú chi tiết (Mua thịt bò, rau củ...)
-    payment_method = Column(String) # Tiền mặt, Chuyển khoản, Momo...
-    location = Column(String) # Địa chỉ nơi tiêu tiền
+    store_name = Column(String)
+    note = Column(Text)
+    payment_method = Column(String)
+    location = Column(String)
+    tags = Column(ARRAY(String), nullable=True)
 
     transaction = relationship("Transaction", back_populates="details")
+
+
 class TransactionMedia(Base):
     __tablename__ = "transaction_media"
     transaction_id = Column(Integer, ForeignKey("transaction.transaction_id", ondelete="CASCADE"), primary_key=True)
-    image_url = Column(String) # Link ảnh hóa đơn lưu trên Cloud
-    is_settled = Column(Boolean, default=False) # Đã đối soát xong giữa ảnh và số liệu chưa
-    ocr_raw = Column(JSONB) # Dữ liệu thô trích xuất từ AI (dùng cho debug/NCKH)
+    image_url = Column(String)
+    is_settled = Column(Boolean, default=False)
+    ocr_raw = Column(JSONB)
 
     transaction = relationship("Transaction", back_populates="media")
-class ExpenseSplit(Base):
-    __tablename__ = "expense_splits"
-    transaction_id = Column(Integer, ForeignKey("transaction.transaction_id", ondelete="CASCADE"), primary_key=True)
-    payer_id = Column(Integer, ForeignKey("user.user_id")) # Ai là người rút ví ra trả trước?
-    is_reimbursed = Column(Boolean, default=False) # Thủ quỹ đã trả lại tiền cho người chi hộ chưa?
-    split_details = Column(JSONB) # Chi tiết chia tiền: {"user_A": 50k, "user_B": 50k}
-
-    transaction = relationship("Transaction", back_populates="split")

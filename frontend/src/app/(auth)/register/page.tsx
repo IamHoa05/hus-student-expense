@@ -46,7 +46,9 @@ export default function RegisterPage() {
   }, [errorMsg, successMsg]);
 
   // ==========================================
-  // HANDLER: BƯỚC 1 - GỬI THÔNG TIN THẬT XUỐNG BACKEND
+  // HANDLER: GỬI THÔNG TIN ĐĂNG KÝ XUỐNG BACKEND
+  // Backend hiện thực hiện đăng ký trực tiếp (không bắt OTP ở bước này),
+  // nên sau khi đăng ký thành công ta chuyển về trang /login.
   // ==========================================
   const handleRegisterInfo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,59 +121,18 @@ export default function RegisterPage() {
         throw new Error(data.detail || "Đăng ký thất bại, vui lòng thử lại.");
       }
 
-      // 6. THÀNH CÔNG: Chuyển sang Bước 2 (Nhập OTP)
-      setSuccessMsg(`Mã xác nhận đã được gửi đến ${email}`);
-      setStep(2);
+      // 6. THÀNH CÔNG: Hiển thị thông báo và chuyển về trang đăng nhập
+      setSuccessMsg(`Đăng ký thành công! Vui lòng đăng nhập.`);
+      // Delay để người dùng thấy thông báo rồi điều hướng
+      setTimeout(() => {
+        router.push('/login');
+      }, 1200);
     } catch (err: any) {
       setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
     }
   };
 
-  // ==========================================
-  // HANDLER: BƯỚC 2 - GỌI API XÁC THỰC OTP THẬT
-  // ==========================================
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    setSuccessMsg("");
-
-    // Kiểm tra định dạng (6 số)
-    if (otp.length < 6) {
-      setErrorMsg("Vui lòng nhập đủ 6 số mã xác nhận.");
-      return;
-    }
-
-    try {
-      // GỌI API XÁC THỰC
-      const response = await fetch(`${API_URL}/auth/verify-registration`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          otp: otp,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail || "Mã xác nhận không chính xác hoặc đã hết hạn."
-        );
-      }
-
-      // THÀNH CÔNG: Chuyển trang
-      setSuccessMsg("Xác thực thành công! Tài khoản của bạn đã được tạo.");
-
-      setTimeout(() => {
-        router.push("/login"); // Chuyển về trang đăng nhập
-      }, 2000);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Đã có lỗi xảy ra, vui lòng thử lại.");
-    }
-  };
+  // (Bỏ bước OTP vì backend hiện tạo user ngay khi gọi /auth/register)
 
   return (
     <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col items-center relative overflow-x-hidden">
@@ -442,7 +403,7 @@ export default function RegisterPage() {
             </header>
 
             <form
-              onSubmit={handleVerifyOTP}
+              onSubmit={(e) => e.preventDefault()}
               className="space-y-6 flex-grow flex flex-col items-center"
             >
               <div className="w-full max-w-[280px]">
@@ -465,8 +426,8 @@ export default function RegisterPage() {
 
               <div className="w-full mt-auto pt-10 pb-8">
                 <button
-                  type="submit"
-                  disabled={!!successMsg}
+                  type="button"
+                  onClick={() => router.push('/login')}
                   className={`w-full py-5 rounded-full font-headline font-bold text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${
                     successMsg
                       ? "bg-[#10b981] text-white shadow-[#10b981]/20"

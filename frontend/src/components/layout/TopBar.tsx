@@ -27,11 +27,14 @@ export default function TopBar() {
     // API Lấy số thông báo
     const fetchNotiCount = async () => {
       try {
-        const response = await fetch("/api/notifications/count");
-        if (response.ok) {
-          const data = await response.json();
-          setNotiCount(data.count || 0);
-        }
+        // Tạm comment API thông báo để tránh gọi service không cần thiết
+        // const response = await fetch("/api/notifications/count");
+        // if (response.ok) {
+        //   const data = await response.json();
+        //   setNotiCount(data.count || 0);
+        // }
+        // Đặt mặc định 0
+        setNotiCount(0);
       } catch (error) {
         console.error("Lỗi khi lấy thông báo:", error);
       }
@@ -41,7 +44,7 @@ export default function TopBar() {
     const fetchUserInfo = async () => {
       try {
         // GỌI API BACKEND: Đổi "/users/me" thành endpoint thực tế của bạn
-        const response = await fetch(`${API_URL}/users/me`, {
+        const response = await fetch(`${API_URL}/auth/me`, {
           method: "GET",
           credentials: "include", // Rất quan trọng để đính kèm Cookie Token xác thực
         });

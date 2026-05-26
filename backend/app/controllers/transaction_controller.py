@@ -1,61 +1,58 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from ..models.user import User
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..middleware.auth import require_user
-from ..config.database import get_db
-from ..schemas.transaction import TransactionCreateSchema, IncomeCreateSchema, ExpenseCreateSchema
-from ..services.transaction_service import TransactionService # Sửa lỗi typo trasaction_service
+from ..models.user import User
+from ..schemas.transaction import TransactionCreateSchema, TransactionUpdateSchema
+from ..services.transaction_service import TransactionService, get_transaction_service
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
-@router.post("/expenses_ocr", status_code=status.HTTP_201_CREATED)
+# TẠO GIAO DỊCH (cả thu lẫn chi, có OCR hoặc không)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_transaction(
-    payload: TransactionCreateSchema, 
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user) # Lấy cả object user luôn
+    payload: TransactionCreateSchema,
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
 ):
-    service = TransactionService(db)
-    # Lấy ID trực tiếp từ object user đã xác thực
-    transaction_id = await service.create_new_transaction(current_user.user_id, payload)
-    
-    return {
-        "status": "success",
-        "data": {"id": transaction_id}
-    }
+    transaction_id = await service.create_transaction(current_user.user_id, payload)
+    return {"status": "success", "data": {"transaction_id": transaction_id}}
 
-@router.post("/incomes", status_code=201)
-async def create_income(
-    payload: IncomeCreateSchema,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+# LẤY DANH SÁCH GIAO DỊCH
+@router.get("", status_code=status.HTTP_200_OK)
+async def get_transactions(
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
 ):
-    """
-    API lưu khoản thu nhập (Lương, Thưởng, Tiền tiêu vặt...)
-    """
-    service = TransactionService(db)
-    result_id = await service.create_income(current_user.user_id, payload)
-    return {
-        "status": "success",
-        "message": "Đã lưu khoản thu mới",
-        "data": {"transaction_id": result_id}
-    }
+    transactions = await service.get_transactions(current_user.user_id)
+    return {"status": "success", "data": transactions}
 
-@router.post("/expenses", status_code=201)
-async def create_expense(
-    payload: ExpenseCreateSchema, # Bạn tạo thêm Schema này hoặc dùng chung với Income
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+# LẤY CHI TIẾT 1 GIAO DỊCH
+@router.get("/{transaction_id}", status_code=status.HTTP_200_OK)
+async def get_transaction(
+    transaction_id: int,
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
 ):
-    """
-    API lưu khoản chi tiêu (Ăn uống, Học tập, Mua sắm...)
-    """
-    service = TransactionService(db)
-    # Logic xử lý cho outflow
-    result_id = await service.create_expense(current_user.user_id, payload)
-    
-    return {
-        "status": "success",
-        "message": "Đã lưu khoản chi tiêu mới",
-        "data": {"transaction_id": result_id}
-    }
+    transaction = await service.get_transaction_by_id(current_user.user_id, transaction_id)
+    return {"status": "success", "data": transaction}
+
+# CẬP NHẬT GIAO DỊCH
+@router.patch("/{transaction_id}", status_code=status.HTTP_200_OK)
+async def update_transaction(
+    transaction_id: int,
+    payload: TransactionUpdateSchema,
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
+):
+    transaction = await service.update_transaction(current_user.user_id, transaction_id, payload)
+    return {"status": "success", "data": transaction}
+
+# XÓA GIAO DỊCH
+@router.delete("/{transaction_id}", status_code=status.HTTP_200_OK)
+async def delete_transaction(
+    transaction_id: int,
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
+):
+    return await service.delete_transaction(current_user.user_id, transaction_id)
