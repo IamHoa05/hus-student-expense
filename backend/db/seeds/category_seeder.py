@@ -86,4 +86,5 @@ if __name__ == "__main__":
 # docker exec -it fastapi_app python /code/db/seeds/category_seeder.py
 
 # 5. xem logs để kiểm tra kết quả
-# docker logs -f fastapi_app
+#/// docker logs -f fastapi_app
+#docker compose logs -f
