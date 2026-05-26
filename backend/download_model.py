@@ -30,3 +30,4 @@ def download_vintern_gguf():
 
 if __name__ == "__main__":
     download_vintern_gguf()
+# Test
