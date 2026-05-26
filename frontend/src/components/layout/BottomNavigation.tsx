@@ -10,17 +10,18 @@ export default function BottomNavigation() {
   // ==============================================================
   const hiddenPaths = [
     "/",
+    "/profile",
     "/login",
     "/add",
     "/room/deposit",
     "/room/split",
-    "/profile",
     "/dashboard/add",
     "/dashboard/goals/[Id]",
     "/notifications",
     "/register",
     "/forgot-password",
     "/verify",
+    "/room/create",
   ];
 
   // Ẩn nếu URL nằm trong danh sách trên, HOẶC là trang chi tiết phân tích (ví dụ: /analytics/cat_food)
@@ -41,7 +42,7 @@ export default function BottomNavigation() {
     { name: "Lịch sử", path: "/transactions", icon: "history" },
     { name: "Thêm", path: "/add", icon: "add_circle", isMain: true },
     { name: "Phân tích", path: "/analytics", icon: "insights" },
-    { name: "Phòng", path: "/room", icon: "groups" },
+    { name: "Tôi", path: "/profile", icon: "person" }, // <-- Đã sửa Phòng -> Tôi và icon -> person
   ];
 
   return (

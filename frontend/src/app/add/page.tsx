@@ -45,7 +45,7 @@ export default function AddTransactionPage() {
       try {
         const response = await fetch(`${API_URL}/categories/`, {
           method: "GET",
-          credentials: "include", 
+          credentials: "include",
         });
 
         if (response.ok) {
@@ -59,7 +59,7 @@ export default function AddTransactionPage() {
             );
             return {
               ...backendCat,
-              icon: frontendInfo ? frontendInfo.icon : "category" 
+              icon: frontendInfo ? frontendInfo.icon : "category",
             };
           });
 
@@ -126,7 +126,6 @@ export default function AddTransactionPage() {
   const removeProduct = (id: number) =>
     setProducts(products.filter((p) => p.id !== id));
 
-  
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -153,21 +152,25 @@ export default function AddTransactionPage() {
     const payload = {
       amount: totalAmount,
       // Nếu là Thu nhập -> Fix cứng 11. Nếu là Chi tiêu -> Lấy ID Hòa đã chọn từ API
-      category_id: isIncome ? 11 : parseInt(selectedCategory), 
+      category_id: isIncome ? 11 : parseInt(selectedCategory),
       note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
       transaction_date: date + "T00:00:00",
       // Đổi type tương ứng cho Backend
       type: isIncome ? "inflow" : "outflow",
       // Nếu là khoản chi, Hòa có thể gửi kèm mảng products nếu Backend yêu cầu chi tiết
-      items: isIncome ? [] : products.map(p => ({
-        name: p.name || "Sản phẩm không tên",
-        quantity: p.qty,
-        price: p.price
-      }))
+      items: isIncome
+        ? []
+        : products.map((p) => ({
+            name: p.name || "Sản phẩm không tên",
+            quantity: p.qty,
+            price: p.price,
+          })),
     };
 
     // CHỌN ĐÚNG LINK API
-    const endpoint = isIncome ? "/transactions/incomes" : "/transactions/expenses";
+    const endpoint = isIncome
+      ? "/transactions/incomes"
+      : "/transactions/expenses";
 
     try {
       const response = await fetch(`${API_URL}${endpoint}`, {
@@ -185,7 +188,11 @@ export default function AddTransactionPage() {
       } else {
         // Việt hóa lỗi từ Backend để Hòa dễ đọc
         const errorMsg = result.detail || "Có lỗi xảy ra khi lưu.";
-        alert(`❌ Lỗi từ Backend: ${typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)}`);
+        alert(
+          `❌ Lỗi từ Backend: ${
+            typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
+          }`
+        );
       }
     } catch (error) {
       console.error("Lỗi fetch:", error);
@@ -193,12 +200,17 @@ export default function AddTransactionPage() {
     }
   };
 
-// Hàm xử lý khi người dùng nhập nhanh số tiền tổng
+  // Hàm xử lý khi người dùng nhập nhanh số tiền tổng
   const handleQuickAmountChange = (value: string) => {
     const amount = parseInt(value) || 0;
     // Cập nhật vào mảng products để logic tính totalAmount không bị sai
     setProducts([
-      { id: Date.now(), name: note || "Giao dịch thủ công", qty: 1, price: amount }
+      {
+        id: Date.now(),
+        name: note || "Giao dịch thủ công",
+        qty: 1,
+        price: amount,
+      },
     ]);
   };
 
@@ -355,11 +367,13 @@ export default function AddTransactionPage() {
                   + Thêm
                 </button>
               </div>
-                    {isManualMode ? (
+              {isManualMode ? (
                 /* GIAO DIỆN NHẬP NHANH SỐ TIỀN TỔNG */
                 <div className="py-4 space-y-2">
                   <div className="relative flex items-center border-b-2 border-[#4b5b9a]/20 pb-2 focus-within:border-[#4b5b9a] transition-all">
-                    <span className="text-3xl font-black text-[#4b5b9a] mr-3">₫</span>
+                    <span className="text-3xl font-black text-[#4b5b9a] mr-3">
+                      ₫
+                    </span>
                     <input
                       type="number"
                       placeholder="0"
@@ -375,11 +389,16 @@ export default function AddTransactionPage() {
                 /* GIAO DIỆN DANH SÁCH SẢN PHẨM (Code cũ của bạn) */
                 <div className="space-y-3">
                   {products.map((p) => (
-                    <div key={p.id} className="p-4 bg-[#f3f3f8] rounded-2xl space-y-3">
+                    <div
+                      key={p.id}
+                      className="p-4 bg-[#f3f3f8] rounded-2xl space-y-3"
+                    >
                       {/* ... Render từng input name, qty, price như cũ ... */}
                     </div>
                   ))}
-                  <button onClick={addProduct} className="...">+ Thêm món lẻ</button>
+                  <button onClick={addProduct} className="...">
+                    + Thêm món lẻ
+                  </button>
                 </div>
               )}
               {/* Hạng mục */}
@@ -389,12 +408,16 @@ export default function AddTransactionPage() {
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {loading ? (
-                    <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">Đang tải hạng mục...</p>
+                    <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">
+                      Đang tải hạng mục...
+                    </p>
                   ) : (
                     categories.map((cat) => (
                       <button
                         key={cat.category_id}
-                        onClick={() => setSelectedCategory(cat.category_id.toString())}
+                        onClick={() =>
+                          setSelectedCategory(cat.category_id.toString())
+                        }
                         className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
                           selectedCategory === cat.category_id.toString()
                             ? "bg-[#4b5b9a] text-white"
@@ -402,7 +425,8 @@ export default function AddTransactionPage() {
                         }`}
                       >
                         <span className="material-symbols-outlined text-lg">
-                          {cat.icon || "category"} {/* Dùng icon từ BE, nếu không có dùng mặc định */}
+                          {cat.icon || "category"}{" "}
+                          {/* Dùng icon từ BE, nếu không có dùng mặc định */}
                         </span>
                         <span className="text-[10px] font-bold truncate">
                           {cat.name}
@@ -492,7 +516,6 @@ export default function AddTransactionPage() {
           </>
         )}
 
-       
         {/* --- GIAO DIỆN KHOẢN THU --- */}
         {transactionType === "income" && (
           <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-[#e2e2e7]/50 space-y-8 animate-in fade-in duration-500">

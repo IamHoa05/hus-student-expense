@@ -18,11 +18,11 @@ services:
     environment:
       - ENABLE_AI=false
       - PYTHONDONTWRITEBYTECODE=1
-      - DATABASE_URL=postgresql://user:password@db:5432/dbname 
+      - DATABASE_URL=postgresql://user:password@db:5432/dbname
     deploy:
       resources:
         limits:
-          memory: 4G 
+          memory: 4G
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -30,7 +30,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/code
-      - ./backend/models:/code/models 
+      - ./backend/models:/code/models
     env_file:
       - ./backend/.env
     # Dùng sh -c để chạy nhiều lệnh
@@ -54,7 +54,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
-      
+
     networks:
       - expense-network
     depends_on:
