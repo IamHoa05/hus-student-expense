@@ -225,11 +225,18 @@ export default function AddTransactionPage() {
 
     const isIncome = transactionType === "income";
 
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
+      .getMinutes()
+      .toString()
+      .padStart(2, "0")}:00`;
+
     const payload = {
       amount: totalAmount,
       category_id: parseInt(selectedCategory),
       note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
-      transaction_date: date + "T00:00:00",
+      // Ghép ngày chọn trên lịch với giờ hiện tại
+      transaction_date: `${date}T${currentTime}`,
       transaction_type: isIncome ? "inflow" : "outflow",
     };
 

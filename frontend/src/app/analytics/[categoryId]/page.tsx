@@ -21,7 +21,6 @@ export default function CategoryDetailPage() {
   const params = useParams();
 
   const rawCategoryId = (params?.categoryId as string) || "1";
-
   const timeFilter = searchParams.get("timeFilter") || "month";
 
   let defaultLabel = "Tháng này";
@@ -32,10 +31,13 @@ export default function CategoryDetailPage() {
   // =======================================================================
   // STATES
   // =======================================================================
+  const [categoryName, setCategoryName] = useState<string>(
+    decodeURIComponent(searchParams.get("name") || "Danh mục")
+  );
+
   const [searchQuery, setSearchQuery] = useState("");
   const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
   const [selectedDayValue, setSelectedDayValue] = useState<string>("");
-  const [categoryName, setCategoryName] = useState<string>("Danh mục");
 
   // API States
   const [chartData, setChartData] = useState<any[]>([]);
@@ -67,12 +69,13 @@ export default function CategoryDetailPage() {
           );
           if (myStat) {
             setStats({ total: myStat.total, count: myStat.transaction_count });
-            setCategoryName(myStat.category_name);
+            setCategoryName((prev) =>
+              prev === "Danh mục" || prev === "" ? myStat.category_name : prev
+            );
           }
         }
 
         // 2. Lấy Biểu đồ Xu hướng (API Trend)
-        // Truyền thêm category_id nếu backend có hỗ trợ lọc xu hướng theo danh mục
         const trendRes = await fetch(
           `${API_URL}/stats/trend?period_type=${timeFilter}&category_id=${rawCategoryId}`,
           { credentials: "include" }
@@ -83,7 +86,7 @@ export default function CategoryDetailPage() {
             const mappedChart = trendData.chart_data.map((d: any) => ({
               label: d.label,
               amount: d.total_amount,
-              value: d.label, // Dùng label làm value id
+              value: d.label,
             }));
             setChartData(mappedChart);
             if (mappedChart.length > 0) {
@@ -114,46 +117,53 @@ export default function CategoryDetailPage() {
             (t: any) => t.category_id?.toString() === rawCategoryId
           );
 
-          const mappedTx = catTx.map((t: any) => {
-            const amountVal = Number(t.amount ?? t.total_amount ?? 0);
-            const created = new Date(
-              t.created_at ?? t.transaction_date ?? Date.now()
+          const mappedTx = catTx
+            .map((t: any) => {
+              const amountVal = Number(t.amount ?? t.total_amount ?? 0);
+              const created = new Date(
+                t.created_at ?? t.transaction_date ?? Date.now()
+              );
+
+              const rawNote = t.note ?? "";
+              const noteValue =
+                typeof rawNote === "string" &&
+                rawNote.trim() !== "" &&
+                rawNote.toLowerCase() !== "string"
+                  ? rawNote
+                  : "";
+
+              return {
+                id: String(t.transaction_id ?? t.id ?? Math.random()),
+                title: noteValue || "Giao dịch mới",
+                amount: isFinite(amountVal) ? amountVal : 0,
+                date: created.toLocaleDateString("vi-VN"),
+                // Thêm time, icon, type để hiển thị UI mới
+                time: created.toLocaleTimeString("vi-VN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                type: t.transaction_type === "inflow" ? "income" : "expense",
+                icon: t.icon || "category",
+                dateObj: created,
+                categoryName: t.category_name,
+              };
+            })
+            // Lọc bỏ rác "string"
+            .filter(
+              (tx: any) =>
+                tx.title.toLowerCase() !== "string" &&
+                tx.categoryName?.toLowerCase() !== "string"
             );
 
-            // Xử lý logic tên giao dịch: Ưu tiên note, rỗng thì thành "Giao dịch mới"
-            const rawNote = t.note ?? "";
-            const noteValue =
-              typeof rawNote === "string" &&
-              rawNote.trim() !== "" &&
-              rawNote.toLowerCase() !== "string"
-                ? rawNote
-                : "";
-
-            // Cập nhật tên danh mục phòng trường hợp API Thống kê không trả về
-            setCategoryName((prev) =>
-              prev === "Danh mục" ? t.category_name || prev : prev
-            );
-
-            return {
-              id: String(t.transaction_id ?? t.id ?? Math.random()),
-              title: noteValue || "Giao dịch mới",
-              amount: isFinite(amountVal) ? amountVal : 0,
-              date: created.toLocaleDateString("vi-VN"),
-              dateObj: created,
-            };
-          });
-
-          // Sắp xếp mới nhất lên đầu
           mappedTx.sort(
             (a: any, b: any) => b.dateObj.getTime() - a.dateObj.getTime()
           );
           setTransactions(mappedTx);
 
-          // Fallback: Nếu API Statistics trả về 0 nhưng API giao dịch lại có dữ liệu
+          // Fallback
           setStats((prev) => {
             if (prev.total === 0 && mappedTx.length > 0) {
               return {
-                // Thêm : number cho sum và : any cho tx
                 total: mappedTx.reduce(
                   (sum: number, tx: any) => sum + tx.amount,
                   0
@@ -174,7 +184,6 @@ export default function CategoryDetailPage() {
     fetchData();
   }, [rawCategoryId, timeFilter]);
 
-  // Cuộn tức thì tới cột biểu đồ cuối cùng
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (lastBarRef.current) {
@@ -199,8 +208,10 @@ export default function CategoryDetailPage() {
       result = result.filter((tx) => tx.title.toLowerCase().includes(q));
     }
 
-    if (priceSort === "asc") result.sort((a, b) => a.amount - b.amount);
-    if (priceSort === "desc") result.sort((a, b) => b.amount - a.amount);
+    if (priceSort === "asc")
+      result.sort((a: any, b: any) => a.amount - b.amount);
+    if (priceSort === "desc")
+      result.sort((a: any, b: any) => b.amount - a.amount);
 
     return result;
   }, [searchQuery, priceSort, transactions]);
@@ -363,30 +374,56 @@ export default function CategoryDetailPage() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-[#e2e2e7]/60 shadow-sm min-h-[400px]">
+            <div className="min-h-[400px]">
               {filteredTransactions.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-3">
                   {filteredTransactions.map((tx) => (
+                    // HTML/CSS Lấy chuẩn từ ảnh giao dịch bạn gửi
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between py-4 border-b border-[#f3f3f8] last:border-0 transition-colors"
+                      className="bg-white p-4 rounded-2xl flex items-center justify-between border border-[#e2e2e7]/80 shadow-sm active:scale-95 transition-all"
                     >
-                      <div className="min-w-0 pr-4">
-                        <p className="font-bold text-sm text-[#1a1c1f] truncate">
-                          {tx.title}
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
+                            tx.type === "income"
+                              ? "bg-[#d1f4e0] text-[#059669]"
+                              : "bg-[#f3f3f8] text-[#4b5b9a]"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-2xl">
+                            {tx.icon}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[13px] text-[#1a1c1f] truncate">
+                            {tx.title}
+                          </p>
+                          <p className="text-[10px] text-[#767681] mt-1 font-medium">
+                            {tx.date} • {tx.time}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p
+                          className={`font-headline font-bold text-sm ${
+                            tx.type === "income"
+                              ? "text-[#059669]"
+                              : "text-[#1a1c1f]"
+                          }`}
+                        >
+                          {tx.type === "income" ? "+" : "-"}
+                          {formatCurrency(tx.amount)}
                         </p>
-                        <p className="text-[10px] text-[#767681] mt-1 font-medium">
-                          {tx.date}
+                        <p className="text-[9px] text-[#767681] font-bold uppercase mt-1">
+                          {tx.categoryName}
                         </p>
                       </div>
-                      <p className="font-headline font-bold text-sm text-[#ba1a1a] shrink-0">
-                        -{formatCurrency(tx.amount)}
-                      </p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-48 opacity-40">
+                <div className="flex flex-col items-center justify-center h-48 opacity-40 bg-white p-6 rounded-2xl border border-[#e2e2e7]/60">
                   <span className="material-symbols-outlined text-5xl mb-2">
                     receipt_long
                   </span>
