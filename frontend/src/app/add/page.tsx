@@ -58,12 +58,12 @@ export default function AddTransactionPage() {
         const inData = resIn.ok ? await resIn.json() : [];
 
         const mapIcon = (backendCat: any) => {
-          const backendName =
-            backendCat.name ?? backendCat.category_name ?? "";
+          const backendName = backendCat.name ?? backendCat.category_name ?? "";
           const frontendInfo = CATEGORIES.find(
-            (f) => f.name.toLowerCase() === backendName.toLowerCase(),
+            (f) => f.name.toLowerCase() === backendName.toLowerCase()
           );
-          const chosenIcon = backendCat.icon || frontendInfo?.icon || "category";
+          const chosenIcon =
+            backendCat.icon || frontendInfo?.icon || "category";
           return {
             ...backendCat,
             name: backendName,
@@ -95,14 +95,14 @@ export default function AddTransactionPage() {
   }, []);
   // States cơ bản
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
-    "expense",
+    "expense"
   );
   // Thêm state để chuyển đổi giữa nhập "Tổng tiền" (thủ công) và "Chi tiết" (OCR/Từng món)
   const [isManualMode, setIsManualMode] = useState(true);
 
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [date, setDate] = useState<string>(
-    new Date().toISOString().split("T")[0],
+    new Date().toISOString().split("T")[0]
   );
   const [note, setNote] = useState<string>("");
   const [customCategory, setCustomCategory] = useState("");
@@ -144,7 +144,7 @@ export default function AddTransactionPage() {
     setProducts([...products, { id: Date.now(), name: "", qty: 1, price: 0 }]);
   const updateProduct = (id: number, field: keyof ProductItem, value: any) => {
     setProducts(
-      products.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
+      products.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
   };
   const removeProduct = (id: number) =>
@@ -221,7 +221,7 @@ export default function AddTransactionPage() {
         alert(
           `❌ Lỗi từ Backend: ${
             typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
-          }`,
+          }`
         );
       }
     } catch (error) {
@@ -378,7 +378,7 @@ export default function AddTransactionPage() {
                             updateProduct(
                               p.id,
                               "price",
-                              parseInt(e.target.value),
+                              parseInt(e.target.value)
                             )
                           }
                           className="w-20 text-right bg-transparent border-none p-0 text-sm font-black text-[#4b5b9a] focus:ring-0"
@@ -539,7 +539,7 @@ export default function AddTransactionPage() {
                   </p>
                   <p className="text-sm font-black text-[#4b5b9a]">
                     {new Intl.NumberFormat("vi-VN").format(
-                      totalAmount / activeGroup.members,
+                      totalAmount / activeGroup.members
                     )}
                     đ/ng
                   </p>
@@ -661,8 +661,8 @@ export default function AddTransactionPage() {
             totalAmount <= 0
               ? "bg-[#c6c5d1] text-white"
               : transactionType === "expense"
-                ? "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/30"
-                : "bg-[#10b981] text-white shadow-[#10b981]/30"
+              ? "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/30"
+              : "bg-[#10b981] text-white shadow-[#10b981]/30"
           }`}
         >
           {selectedCategory === "group" && transactionType === "expense"
