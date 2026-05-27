@@ -1,27 +1,28 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// 1. Định nghĩa Hạng mục mở rộng
+// 1. Định nghĩa Hạng mục Frontend (Khớp với file seeder để map icon chuẩn, không có Nhóm)
 const CATEGORIES = [
+  // Chi tiêu
   { id: "c1", name: "Ăn uống", icon: "restaurant" },
   { id: "c2", name: "Học tập", icon: "school" },
   { id: "c3", name: "Di chuyển", icon: "directions_bus" },
   { id: "c4", name: "Dịch vụ", icon: "settings_suggest" },
   { id: "c5", name: "Mua sắm", icon: "shopping_bag" },
   { id: "c6", name: "Giải trí", icon: "sports_esports" },
-  { id: "c7", name: "Cố định", icon: "home_work" },
-  { id: "group", name: "Nhóm", icon: "groups" }, // Nút Nhóm nằm ở đây
-  { id: "c8", name: "Khác", icon: "more_horiz" },
-];
-
-// MOCK DATA: Danh sách nhóm (Lấy từ hệ thống Room của bạn)
-const MOCK_GROUPS = [
-  { id: "g1", name: "Phòng 302 - Cầu Giấy", members: 4 },
-  { id: "g2", name: "Hội bạn thân", members: 6 },
-  { id: "g3", name: "Nhóm dự án AI", members: 3 },
+  { id: "c7", name: "Sức khỏe", icon: "favorite" },
+  { id: "c8", name: "Cố định", icon: "home_work" },
+  { id: "c9", name: "Khác", icon: "more_horiz" },
+  // Thu nhập
+  { id: "in1", name: "Lương", icon: "payments" },
+  { id: "in2", name: "Thưởng", icon: "card_giftcard" },
+  { id: "in3", name: "Tiền tiêu vặt", icon: "savings" },
+  { id: "in4", name: "Thu nhập khác", icon: "account_balance" },
 ];
 
 interface ProductItem {
@@ -31,20 +32,52 @@ interface ProductItem {
   price: number;
 }
 
+// Class Tailwind dùng để ẩn mũi tên tăng giảm số ở input type="number"
+const hideNumberSpinners =
+  "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
 export default function AddTransactionPage() {
   const router = useRouter();
 
-  // State mới để chứa categories từ Backend (phân tách thu / chi)
+  // =======================================================================
+  // STATES CƠ BẢN
+  // =======================================================================
+  const [transactionType, setTransactionType] = useState<"expense" | "income">(
+    "expense"
+  );
+  const [isManualMode, setIsManualMode] = useState(true);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [date, setDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [note, setNote] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState("");
+
+  // States API Hạng mục
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
-  // 2. Hàm gọi API lấy danh sách hạng mục
-  // 2. Hàm gọi API lấy danh sách hạng mục
+  // States cho danh sách sản phẩm
+  const [products, setProducts] = useState<ProductItem[]>([
+    { id: Date.now(), name: "", qty: 1, price: 0 },
+  ]);
+
+  // States & Refs cho OCR
+  const [isScanning, setIsScanning] = useState(false);
+  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
+  const [hasUploadedImage, setHasUploadedImage] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // =======================================================================
+  // FETCH CATEGORIES TỪ API
+  // =======================================================================
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // Fetch expense (outflow) and income (inflow) in parallel
         const [resOut, resIn] = await Promise.all([
           fetch(`${API_URL}/categories?type=outflow`, {
             credentials: "include",
@@ -62,22 +95,29 @@ export default function AddTransactionPage() {
           const frontendInfo = CATEGORIES.find(
             (f) => f.name.toLowerCase() === backendName.toLowerCase()
           );
-          const chosenIcon =
-            backendCat.icon || frontendInfo?.icon || "category";
           return {
             ...backendCat,
             name: backendName,
-            icon: chosenIcon,
+            icon: backendCat.icon || frontendInfo?.icon || "category",
           };
         };
 
-        const finalOut = Array.isArray(outData) ? outData.map(mapIcon) : [];
-        const finalIn = Array.isArray(inData) ? inData.map(mapIcon) : [];
+        // BỘ LỌC: Loại bỏ các hạng mục rác có tên chứa chữ "string" từ Backend
+        const finalOut = Array.isArray(outData)
+          ? outData
+              .map(mapIcon)
+              .filter((cat) => cat.name.toLowerCase() !== "string")
+          : [];
+        const finalIn = Array.isArray(inData)
+          ? inData
+              .map(mapIcon)
+              .filter((cat) => cat.name.toLowerCase() !== "string")
+          : [];
 
         setExpenseCategories(finalOut);
         setIncomeCategories(finalIn);
 
-        // Set default selectedCategory based on current transaction type
+        // Đặt mặc định danh mục đang chọn
         if (transactionType === "expense" && finalOut.length > 0) {
           setSelectedCategory(finalOut[0].category_id.toString());
         }
@@ -87,153 +127,30 @@ export default function AddTransactionPage() {
       } catch (error) {
         console.error("Lỗi lấy categories:", error);
       } finally {
-        setLoading(false);
+        setLoadingCategories(false);
       }
     };
 
     fetchCategories();
   }, []);
-  // States cơ bản
-  const [transactionType, setTransactionType] = useState<"expense" | "income">(
-    "expense"
-  );
-  // Thêm state để chuyển đổi giữa nhập "Tổng tiền" (thủ công) và "Chi tiết" (OCR/Từng món)
-  const [isManualMode, setIsManualMode] = useState(true);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [date, setDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
-  const [note, setNote] = useState<string>("");
-  const [customCategory, setCustomCategory] = useState("");
-
-  // States cho tính năng Nhóm
-  const [selectedGroupId, setSelectedGroupId] = useState(MOCK_GROUPS[0].id);
-  const [isAdvancePayment, setIsAdvancePayment] = useState(true); // Mặc định là có ứng trước
-
-  // States cho danh sách sản phẩm
-  const [products, setProducts] = useState<ProductItem[]>([
-    { id: Date.now(), name: "", qty: 1, price: 0 },
-  ]);
-
-  // States cho OCR
-  const [isScanning, setIsScanning] = useState(false);
-  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
-
-  // Khi người dùng chuyển giữa 'expense' và 'income', set default selectedCategory
   useEffect(() => {
-    if (transactionType === "expense") {
-      if (expenseCategories.length > 0)
-        setSelectedCategory(expenseCategories[0].category_id.toString());
-    } else {
-      if (incomeCategories.length > 0)
-        setSelectedCategory(incomeCategories[0].category_id.toString());
+    if (transactionType === "expense" && expenseCategories.length > 0) {
+      setSelectedCategory(expenseCategories[0].category_id.toString());
+    } else if (transactionType === "income" && incomeCategories.length > 0) {
+      setSelectedCategory(incomeCategories[0].category_id.toString());
     }
   }, [transactionType, expenseCategories, incomeCategories]);
 
-  // Tính tổng tiền
+  // =======================================================================
+  // LOGIC SẢN PHẨM & OCR
+  // =======================================================================
   const totalAmount = useMemo(() => {
     return products.reduce((sum, item) => sum + item.price * item.qty, 0);
   }, [products]);
 
-  const activeGroup =
-    MOCK_GROUPS.find((g) => g.id === selectedGroupId) || MOCK_GROUPS[0];
-
-  // Logic sản phẩm
-  const addProduct = () =>
-    setProducts([...products, { id: Date.now(), name: "", qty: 1, price: 0 }]);
-  const updateProduct = (id: number, field: keyof ProductItem, value: any) => {
-    setProducts(
-      products.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
-  };
-  const removeProduct = (id: number) =>
-    setProducts(products.filter((p) => p.id !== id));
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsScanning(true);
-      const reader = new FileReader();
-      reader.onload = (ev) => setOcrPreview(ev.target?.result as string);
-      reader.readAsDataURL(file);
-      setTimeout(() => {
-        setIsScanning(false);
-        setProducts([
-          { id: 1, name: "Sữa tươi Vinamilk", qty: 2, price: 15000 },
-          { id: 2, name: "Bánh mì gối", qty: 1, price: 25000 },
-        ]);
-      }, 2500);
-    }
-  };
-
-  const handleSave = async () => {
-    if (totalAmount <= 0) return alert("Vui lòng nhập số tiền!");
-
-    const isIncome = transactionType === "income";
-
-    // Bắt buộc chọn hạng mục
-    if (!selectedCategory)
-      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
-
-    // CHUẨN BỊ PAYLOAD
-    const payload = {
-      amount: totalAmount,
-      // Dùng category id đã chọn cho cả thu và chi
-      category_id: parseInt(selectedCategory),
-      note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
-      transaction_date: date + "T00:00:00",
-      // Đổi type tương ứng cho Backend
-      type: isIncome ? "inflow" : "outflow",
-      // Nếu là khoản chi, Hòa có thể gửi kèm mảng products nếu Backend yêu cầu chi tiết
-      items: isIncome
-        ? []
-        : products.map((p) => ({
-            name: p.name || "Sản phẩm không tên",
-            quantity: p.qty,
-            price: p.price,
-          })),
-    };
-
-    // Gọi API chung của backend: POST /transactions
-    try {
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          amount: payload.amount,
-          transaction_type: payload.type || (isIncome ? "inflow" : "outflow"),
-          transaction_date: payload.transaction_date,
-          category_id: payload.category_id,
-          note: payload.note,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        alert(`✅ Đã lưu ${isIncome ? "khoản thu" : "khoản chi"} thành công!`);
-        router.push("/dashboard");
-      } else {
-        // Việt hóa lỗi từ Backend để Hòa dễ đọc
-        const errorMsg = result.detail || "Có lỗi xảy ra khi lưu.";
-        alert(
-          `❌ Lỗi từ Backend: ${
-            typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
-          }`
-        );
-      }
-    } catch (error) {
-      console.error("Lỗi fetch:", error);
-      alert("❌ Lỗi kết nối đến Server!");
-    }
-  };
-
-  // Hàm xử lý khi người dùng nhập nhanh số tiền tổng
   const handleQuickAmountChange = (value: string) => {
     const amount = parseInt(value) || 0;
-    // Cập nhật vào mảng products để logic tính totalAmount không bị sai
     setProducts([
       {
         id: Date.now(),
@@ -244,27 +161,128 @@ export default function AddTransactionPage() {
     ]);
   };
 
+  const addProduct = () => {
+    setIsManualMode(false);
+    setProducts([...products, { id: Date.now(), name: "", qty: 1, price: 0 }]);
+  };
+
+  const updateProduct = (id: number, field: keyof ProductItem, value: any) => {
+    setProducts(
+      products.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+    );
+  };
+
+  const removeProduct = (id: number) => {
+    setProducts(products.filter((p) => p.id !== id));
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsScanning(true);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setOcrPreview(ev.target?.result as string);
+        setHasUploadedImage(true);
+      };
+      reader.readAsDataURL(file);
+
+      // Lưu lại timeout để có thể hủy nếu người dùng ấn X sớm
+      scanTimeoutRef.current = setTimeout(() => {
+        setIsScanning(false);
+        setIsManualMode(false);
+        setProducts([
+          { id: 1, name: "Sữa tươi Vinamilk", qty: 2, price: 15000 },
+          { id: 2, name: "Bánh mì gối", qty: 1, price: 25000 },
+        ]);
+        alert("Đã quét hóa đơn thành công!");
+      }, 2500);
+    }
+  };
+
+  // Hàm Hủy bỏ ảnh (Reset toàn bộ quá trình OCR về nhập thủ công)
+  const handleRemoveImage = () => {
+    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
+    setIsScanning(false);
+    setOcrPreview(null);
+    setHasUploadedImage(false);
+    setIsManualMode(true);
+    setProducts([
+      { id: Date.now(), name: note || "Giao dịch thủ công", qty: 1, price: 0 },
+    ]);
+
+    // Reset lại value của input file để có thể chọn lại chính ảnh vừa xóa
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // =======================================================================
+  // LƯU API (POST)
+  // =======================================================================
+  const handleSave = async () => {
+    if (totalAmount <= 0) return alert("Vui lòng nhập số tiền!");
+    if (!selectedCategory)
+      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
+
+    const isIncome = transactionType === "income";
+
+    const payload = {
+      amount: totalAmount,
+      category_id: parseInt(selectedCategory),
+      note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
+      transaction_date: date + "T00:00:00",
+      transaction_type: isIncome ? "inflow" : "outflow",
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Đã lưu ${isIncome ? "khoản thu" : "khoản chi"} thành công!`);
+        router.push("/dashboard");
+      } else {
+        const errorMsg = result.detail || "Có lỗi xảy ra khi lưu.";
+        alert(
+          `❌ Lỗi từ Server: ${
+            typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
+          }`
+        );
+      }
+    } catch (error) {
+      console.error("Lỗi fetch:", error);
+      alert("❌ Lỗi kết nối đến Server!");
+    }
+  };
+
   return (
-    <main className="flex-grow w-full max-w-md mx-auto pb-40 relative min-h-screen bg-[#f9f9fe]">
-      <div className="px-6 pt-6 space-y-6">
+    <main className="flex-grow w-full max-w-md mx-auto pb-32 relative min-h-screen bg-[#f9f9fe]">
+      <div className="px-5 pt-4 space-y-5">
         {/* Header */}
-        <div className="flex items-center gap-3">
+        <header className="flex items-center gap-3 py-1">
           <button
             onClick={() => router.back()}
-            className="material-symbols-outlined text-[#1a1c1f]"
+            className="p-1.5 -ml-1.5 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95 outline-none"
           >
-            arrow_back
+            <span className="material-symbols-outlined text-xl">
+              arrow_back
+            </span>
           </button>
-          <h1 className="font-headline font-bold text-xl text-[#1a1c1f]">
+          <h1 className="font-headline font-bold text-lg text-[#1a1c1f]">
             {transactionType === "expense" ? "Thêm chi tiêu" : "Thêm thu nhập"}
           </h1>
-        </div>
+        </header>
 
         {/* Toggle Thu/Chi */}
         <section className="flex p-1 bg-[#ededf2] rounded-full w-full shadow-inner">
           <button
             onClick={() => setTransactionType("expense")}
-            className={`flex-1 py-3 text-sm font-bold rounded-full transition-all ${
+            className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "expense"
                 ? "bg-white text-[#4b5b9a] shadow-md"
                 : "text-[#767681]"
@@ -274,7 +292,7 @@ export default function AddTransactionPage() {
           </button>
           <button
             onClick={() => setTransactionType("income")}
-            className={`flex-1 py-3 text-sm font-bold rounded-full transition-all ${
+            className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "income"
                 ? "bg-white text-[#10b981] shadow-md"
                 : "text-[#767681]"
@@ -290,178 +308,227 @@ export default function AddTransactionPage() {
             {/* 1. OCR */}
             <section className="relative">
               <div
-                className={`bg-white p-6 rounded-[2rem] border-2 border-dashed border-[#4b5b9a]/20 flex flex-col items-center justify-center text-center transition-all ${
+                className={`bg-white rounded-2xl border-2 border-dashed border-[#4b5b9a]/20 flex flex-col items-center justify-center text-center transition-all overflow-hidden ${
                   isScanning ? "opacity-50" : "hover:border-[#4b5b9a]"
-                }`}
+                } ${hasUploadedImage ? "p-0" : "p-6"}`}
               >
-                <div className="w-16 h-16 rounded-full bg-[#dde1ff] flex items-center justify-center mb-3">
-                  <span className="material-symbols-outlined text-[#4b5b9a] text-3xl">
-                    photo_camera
-                  </span>
-                </div>
-                <h3 className="font-headline font-bold text-sm text-[#1a1c1f]">
-                  Quét hóa đơn
-                </h3>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  onChange={handleFileUpload}
-                />
+                {hasUploadedImage && ocrPreview ? (
+                  <div className="relative w-full aspect-[4/3]">
+                    <Image
+                      src={ocrPreview}
+                      alt="Hóa đơn"
+                      fill
+                      className="object-cover"
+                    />
+                    <button
+                      onClick={handleRemoveImage}
+                      className="absolute top-2 right-2 w-8 h-8 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors outline-none z-20"
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        close
+                      </span>
+                    </button>
+                    {!isScanning && (
+                      <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full z-20">
+                        <p className="text-white text-[10px] font-bold">
+                          Đã quét hóa đơn
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-14 h-14 rounded-full bg-[#dde1ff] flex items-center justify-center mb-3">
+                      <span className="material-symbols-outlined text-[#4b5b9a] text-2xl">
+                        photo_camera
+                      </span>
+                    </div>
+                    <h3 className="font-headline font-bold text-sm text-[#1a1c1f] mb-1">
+                      Quét hóa đơn
+                    </h3>
+                    <p className="text-[9px] text-[#767681]">
+                      Chạm để chọn ảnh từ thư viện
+                    </p>
+                  </>
+                )}
+
+                {/* Input file bị ẩn, chỉ clickable khi CHƯA có ảnh */}
+                {!hasUploadedImage && (
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                    onChange={handleFileUpload}
+                  />
+                )}
               </div>
+
+              {/* Spinner hiển thị đè lên khi đang quét ảnh */}
               {isScanning && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-[2rem] z-10 backdrop-blur-sm">
-                  <div className="w-6 h-6 border-4 border-[#4b5b9a] border-t-transparent rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-2xl z-10 backdrop-blur-sm pointer-events-none">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-[#4b5b9a] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-xs font-bold text-[#4b5b9a]">
+                      Đang xử lý ảnh...
+                    </p>
+                  </div>
                 </div>
               )}
             </section>
 
-            {/* 2. Chi tiết sản phẩm */}
-            <section className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-[#e2e2e7]/50 space-y-5">
-              <div className="flex justify-between items-center px-1">
+            {/* 2. Chi tiết sản phẩm & Nhập tổng tiền */}
+            <section className="bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50 space-y-4">
+              <div className="flex justify-between items-end px-1 border-b border-[#e2e2e7] pb-3">
                 <h2 className="font-headline font-bold text-[#1a1c1f]">
-                  Danh sách sản phẩm
+                  {isManualMode ? "Số tiền chi tiêu" : "Danh sách sản phẩm"}
                 </h2>
-                <div className="text-right">
-                  <p className="text-[10px] font-black text-[#767681] uppercase tracking-tighter">
-                    Tổng tiền
-                  </p>
-                  <p className="font-headline font-black text-xl text-[#4b5b9a]">
-                    {new Intl.NumberFormat("vi-VN").format(totalAmount)}đ
-                  </p>
-                </div>
+                {!isManualMode && (
+                  <div className="text-right">
+                    <p className="text-[9px] font-black text-[#767681] uppercase tracking-tighter">
+                      Tổng tiền
+                    </p>
+                    <p className="font-headline font-black text-lg text-[#4b5b9a]">
+                      {new Intl.NumberFormat("vi-VN").format(totalAmount)}đ
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-3">
-                {products.map((p) => (
-                  <div
-                    key={p.id}
-                    className="p-4 bg-[#f3f3f8] rounded-2xl space-y-3"
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Tên sản phẩm..."
-                        value={p.name}
-                        onChange={(e) =>
-                          updateProduct(p.id, "name", e.target.value)
-                        }
-                        className="flex-grow bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-[#1a1c1f]"
-                      />
-                      <button
-                        onClick={() => removeProduct(p.id)}
-                        className="material-symbols-outlined text-[#767681] text-sm"
-                      >
-                        close
-                      </button>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 bg-white px-2 py-0.5 rounded-lg border border-[#e2e2e7]">
-                        <span className="text-[10px] font-bold text-[#767681]">
-                          SL:
-                        </span>
-                        <input
-                          type="number"
-                          value={p.qty}
-                          onChange={(e) =>
-                            updateProduct(p.id, "qty", parseInt(e.target.value))
-                          }
-                          className="w-8 bg-transparent border-none p-0 text-center text-xs font-black"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={p.price || ""}
-                          onChange={(e) =>
-                            updateProduct(
-                              p.id,
-                              "price",
-                              parseInt(e.target.value)
-                            )
-                          }
-                          className="w-20 text-right bg-transparent border-none p-0 text-sm font-black text-[#4b5b9a] focus:ring-0"
-                        />
-                        <span className="text-[10px] font-bold text-[#4b5b9a]">
-                          đ
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={addProduct}
-                  className="w-full py-3 border-2 border-dashed border-[#c6c5d1] rounded-2xl text-[10px] font-bold uppercase text-[#767681]"
-                >
-                  + Thêm
-                </button>
-              </div>
               {isManualMode ? (
                 /* GIAO DIỆN NHẬP NHANH SỐ TIỀN TỔNG */
-                <div className="py-4 space-y-2">
-                  <div className="relative flex items-center border-b-2 border-[#4b5b9a]/20 pb-2 focus-within:border-[#4b5b9a] transition-all">
-                    <span className="text-3xl font-black text-[#4b5b9a] mr-3">
+                <div className="py-2 space-y-4 px-1">
+                  <div className="relative flex items-center border-b border-[#e2e2e7] pb-2 focus-within:border-[#4b5b9a] transition-all">
+                    <span className="text-3xl font-black text-[#4b5b9a] mr-3 underline decoration-2 underline-offset-4">
                       ₫
                     </span>
                     <input
                       type="number"
                       placeholder="0"
-                      className="w-full bg-transparent border-none p-0 text-5xl font-headline font-black text-[#1a1c1f] focus:ring-0 placeholder:text-[#e2e2e7]"
+                      className={`w-full bg-transparent border-none p-0 text-5xl font-headline font-medium text-[#1a1c1f] focus:outline-none placeholder:text-[#d1d1d6] ${hideNumberSpinners}`}
                       onChange={(e) => handleQuickAmountChange(e.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-[#767681] italic">
-                    * Nhập nhanh số tiền bạn đã chi mà không cần hóa đơn
-                  </p>
+                  <div className="flex justify-between items-start">
+                    <p className="text-[11px] text-[#767681] italic font-medium leading-relaxed">
+                      * Nhập nhanh số tiền bạn đã chi mà không cần hóa đơn
+                    </p>
+                    <button
+                      onClick={() => setIsManualMode(false)}
+                      className="text-[10px] font-bold text-[#4b5b9a] underline whitespace-nowrap ml-2 outline-none"
+                    >
+                      Nhập chi tiết
+                    </button>
+                  </div>
                 </div>
               ) : (
-                /* GIAO DIỆN DANH SÁCH SẢN PHẨM (Code cũ của bạn) */
-                <div className="space-y-3">
+                /* GIAO DIỆN DANH SÁCH CHI TIẾT */
+                <div className="space-y-2.5">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setIsManualMode(true)}
+                      className="text-[10px] font-bold text-[#767681] underline mb-1 outline-none"
+                    >
+                      Quay lại nhập tổng tiền
+                    </button>
+                  </div>
                   {products.map((p) => (
                     <div
                       key={p.id}
-                      className="p-4 bg-[#f3f3f8] rounded-2xl space-y-3"
+                      className="p-3 bg-[#f3f3f8] rounded-xl space-y-2.5"
                     >
-                      {/* ... Render từng input name, qty, price như cũ ... */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Tên sản phẩm..."
+                          value={p.name}
+                          onChange={(e) =>
+                            updateProduct(p.id, "name", e.target.value)
+                          }
+                          className="flex-grow bg-transparent border-none p-0 focus:outline-none text-xs font-bold text-[#1a1c1f]"
+                        />
+                        <button
+                          onClick={() => removeProduct(p.id)}
+                          className="material-symbols-outlined text-[#767681] text-base outline-none"
+                        >
+                          close
+                        </button>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2 bg-white px-2 py-0.5 rounded-lg border border-[#e2e2e7]">
+                          <span className="text-[9px] font-bold text-[#767681]">
+                            SL:
+                          </span>
+                          <input
+                            type="number"
+                            value={p.qty}
+                            onChange={(e) =>
+                              updateProduct(
+                                p.id,
+                                "qty",
+                                parseInt(e.target.value) || 1
+                              )
+                            }
+                            className={`w-8 bg-transparent border-none p-0 text-center text-xs font-black focus:outline-none ${hideNumberSpinners}`}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={p.price || ""}
+                            onChange={(e) =>
+                              updateProduct(
+                                p.id,
+                                "price",
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            className={`w-20 text-right bg-transparent border-none p-0 text-xs font-black text-[#4b5b9a] focus:outline-none ${hideNumberSpinners}`}
+                          />
+                          <span className="text-[9px] font-bold text-[#4b5b9a]">
+                            đ
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ))}
-                  <button onClick={addProduct} className="...">
-                    + Thêm món lẻ
+                  <button
+                    onClick={addProduct}
+                    className="w-full py-2.5 border-2 border-dashed border-[#c6c5d1] rounded-xl text-[9px] font-bold uppercase text-[#767681] hover:border-[#4b5b9a] hover:text-[#4b5b9a] transition-colors outline-none"
+                  >
+                    + Thêm sản phẩm
                   </button>
                 </div>
               )}
-              {/* Hạng mục */}
-              <div className="pt-4 border-t border-[#f3f3f8] space-y-4">
-                <p className="text-[10px] font-black uppercase text-[#4b5b9a] tracking-widest">
+
+              {/* Hạng mục chi tiêu */}
+              <div className="pt-5 border-t border-[#f3f3f8] space-y-4">
+                <p className="text-[9px] font-black uppercase text-[#4b5b9a] tracking-widest text-center">
                   Chọn hạng mục chi tiêu
                 </p>
                 <div className="grid grid-cols-3 gap-2">
-                  {loading ? (
+                  {loadingCategories ? (
                     <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">
                       Đang tải hạng mục...
                     </p>
                   ) : (
-                    (transactionType === "expense"
-                      ? expenseCategories
-                      : incomeCategories
-                    ).map((cat: any) => (
+                    expenseCategories.map((cat: any) => (
                       <button
                         key={cat.category_id}
                         onClick={() =>
                           setSelectedCategory(cat.category_id.toString())
                         }
-                        className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all outline-none ${
                           selectedCategory === cat.category_id.toString()
-                            ? "bg-[#4b5b9a] text-white"
-                            : "bg-[#f3f3f8] text-[#454650]"
+                            ? "bg-[#4b5b9a] text-white shadow-md shadow-[#4b5b9a]/20 scale-105"
+                            : "bg-[#f3f3f8] text-[#454650] hover:bg-[#dde1ff] hover:text-[#4b5b9a]"
                         }`}
                       >
-                        <span className="material-symbols-outlined text-lg">
-                          {cat.icon || "category"}{" "}
-                          {/* Dùng icon từ BE, nếu không có dùng mặc định */}
+                        <span className="material-symbols-outlined text-2xl">
+                          {cat.icon}
                         </span>
-                        <span className="text-[10px] font-bold truncate">
+                        <span className="text-[10px] font-bold text-center leading-tight whitespace-normal w-full break-words">
                           {cat.name}
                         </span>
                       </button>
@@ -470,100 +537,31 @@ export default function AddTransactionPage() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Tên hạng mục khác (sẽ tự động lưu lại...)"
+                  placeholder="Tên hạng mục khác..."
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#f3f3f8] rounded-xl border-none text-[10px] font-bold focus:ring-1 focus:ring-[#4b5b9a] placeholder:italic"
+                  className="w-full px-4 py-3.5 bg-[#f3f3f8] rounded-xl border-none text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#4b5b9a]/40 placeholder:italic placeholder:font-medium"
                 />
               </div>
             </section>
-
-            {/* BOX CHIA TIỀN NHÓM - NÂNG CẤP */}
-            {selectedCategory === "group" && (
-              <section className="bg-[#dde1ff] p-5 rounded-[2rem] animate-in slide-in-from-top-4 space-y-4 border border-[#4b5b9a]/20">
-                {/* Chọn nhóm */}
-                <div className="flex items-center gap-3 bg-white p-3 rounded-2xl shadow-sm">
-                  <div className="w-10 h-10 bg-[#f3f3f8] rounded-full flex items-center justify-center text-[#4b5b9a] shrink-0">
-                    <span className="material-symbols-outlined text-xl">
-                      groups
-                    </span>
-                  </div>
-                  <div className="flex-grow">
-                    <p className="text-[9px] font-black text-[#767681] uppercase tracking-widest mb-0.5">
-                      Chọn nhóm
-                    </p>
-                    <select
-                      value={selectedGroupId}
-                      onChange={(e) => setSelectedGroupId(e.target.value)}
-                      className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#1a1c1f] focus:ring-0 appearance-none"
-                    >
-                      {MOCK_GROUPS.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name} ({g.members} người)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <span className="material-symbols-outlined text-[#c6c5d1] pr-2">
-                    expand_more
-                  </span>
-                </div>
-
-                {/* Toggle Ứng trước */}
-                <div className="flex items-center justify-between px-2">
-                  <div>
-                    <p className="text-xs font-bold text-[#1a1c1f]">
-                      Tôi đã ứng trước
-                    </p>
-                    <p className="text-[9px] font-medium text-[#767681] mt-0.5">
-                      Trả tiền túi thay vì dùng quỹ chung
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsAdvancePayment(!isAdvancePayment)}
-                    className={`w-11 h-6 rounded-full relative transition-colors duration-300 ${
-                      isAdvancePayment ? "bg-[#4b5b9a]" : "bg-[#c6c5d1]"
-                    }`}
-                  >
-                    <div
-                      className={`w-4 h-4 bg-white rounded-full absolute top-1 shadow-sm transition-transform duration-300 ${
-                        isAdvancePayment ? "left-6" : "left-1"
-                      }`}
-                    ></div>
-                  </button>
-                </div>
-
-                <div className="flex justify-between items-center pt-3 border-t border-[#4b5b9a]/10 px-2">
-                  <p className="text-[10px] font-bold text-[#4b5b9a]">
-                    Chia cho {activeGroup.members} người:
-                  </p>
-                  <p className="text-sm font-black text-[#4b5b9a]">
-                    {new Intl.NumberFormat("vi-VN").format(
-                      totalAmount / activeGroup.members
-                    )}
-                    đ/ng
-                  </p>
-                </div>
-              </section>
-            )}
           </>
         )}
 
         {/* --- GIAO DIỆN KHOẢN THU --- */}
         {transactionType === "income" && (
-          <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-[#e2e2e7]/50 space-y-8 animate-in fade-in duration-500">
-            <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-[#10b981] tracking-widest ml-1">
+          <section className="bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50 space-y-5 animate-in fade-in duration-500">
+            <div className="space-y-4 px-1">
+              <label className="text-[9px] font-black uppercase text-[#10b981] tracking-widest">
                 Số tiền nhận được
               </label>
-              <div className="relative flex items-center border-b-2 border-[#10b981]/20 pb-2 transition-all focus-within:border-[#10b981]">
-                <span className="text-3xl font-black text-[#10b981] mr-3">
+              <div className="relative flex items-center border-b border-[#e2e2e7] pb-2 transition-all focus-within:border-[#10b981]">
+                <span className="text-3xl font-black text-[#10b981] mr-3 underline decoration-2 underline-offset-4">
                   ₫
                 </span>
                 <input
                   type="number"
                   placeholder="0"
-                  className="w-full bg-transparent border-none p-0 text-5xl font-headline font-black text-[#1a1c1f] focus:ring-0 placeholder:text-[#e2e2e7]"
+                  className={`w-full bg-transparent border-none p-0 text-5xl font-headline font-medium text-[#1a1c1f] focus:outline-none placeholder:text-[#d1d1d6] ${hideNumberSpinners}`}
                   onChange={(e) =>
                     setProducts([
                       {
@@ -576,13 +574,14 @@ export default function AddTransactionPage() {
                   }
                 />
               </div>
-              {/* Hạng mục cho Khoản thu */}
-              <div className="pt-2 border-t border-[#f3f3f8] space-y-4">
-                <p className="text-[10px] font-black uppercase text-[#10b981] tracking-widest">
+
+              {/* Hạng mục Thu nhập */}
+              <div className="pt-5 space-y-4 border-t border-[#f3f3f8]">
+                <p className="text-[9px] font-black uppercase text-[#10b981] tracking-widest text-center">
                   Chọn hạng mục thu nhập
                 </p>
                 <div className="grid grid-cols-3 gap-2">
-                  {loading ? (
+                  {loadingCategories ? (
                     <p className="text-[10px] col-span-3 text-center py-4 text-[#767681]">
                       Đang tải hạng mục...
                     </p>
@@ -593,16 +592,16 @@ export default function AddTransactionPage() {
                         onClick={() =>
                           setSelectedCategory(cat.category_id.toString())
                         }
-                        className={`flex items-center gap-2 p-3 rounded-xl transition-all ${
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all outline-none ${
                           selectedCategory === cat.category_id.toString()
-                            ? "bg-[#10b981] text-white"
-                            : "bg-[#f3f3f8] text-[#454650]"
+                            ? "bg-[#10b981] text-white shadow-md shadow-[#10b981]/20 scale-105"
+                            : "bg-[#f3f3f8] text-[#454650] hover:bg-[#d1f4e0] hover:text-[#10b981]"
                         }`}
                       >
-                        <span className="material-symbols-outlined text-lg">
-                          {cat.icon || "category"}
+                        <span className="material-symbols-outlined text-2xl">
+                          {cat.icon}
                         </span>
-                        <span className="text-[10px] font-bold truncate">
+                        <span className="text-[10px] font-bold text-center leading-tight whitespace-normal w-full break-words">
                           {cat.name}
                         </span>
                       </button>
@@ -615,10 +614,10 @@ export default function AddTransactionPage() {
         )}
 
         {/* Thông tin chung: Ngày & Ghi chú */}
-        <section className="space-y-4">
-          <div className="flex items-center bg-white p-4 rounded-2xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
+        <section className="space-y-3">
+          <div className="flex items-center bg-white p-3.5 rounded-xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
             <span
-              className={`material-symbols-outlined ${
+              className={`material-symbols-outlined text-lg ${
                 transactionType === "income"
                   ? "text-[#10b981]"
                   : "text-[#4b5b9a]"
@@ -630,12 +629,12 @@ export default function AddTransactionPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="bg-transparent border-none p-0 text-sm font-bold flex-grow focus:ring-0 text-[#1a1c1f]"
+              className="bg-transparent border-none p-0 text-xs font-bold flex-grow focus:outline-none text-[#1a1c1f]"
             />
           </div>
-          <div className="flex items-center bg-white p-4 rounded-2xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
+          <div className="flex items-center bg-white p-3.5 rounded-xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
             <span
-              className={`material-symbols-outlined ${
+              className={`material-symbols-outlined text-lg ${
                 transactionType === "income"
                   ? "text-[#10b981]"
                   : "text-[#4b5b9a]"
@@ -648,7 +647,7 @@ export default function AddTransactionPage() {
               placeholder="Ghi chú thêm..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="bg-transparent border-none p-0 text-sm font-medium flex-grow focus:ring-0 text-[#1a1c1f] placeholder:text-[#c6c5d1]"
+              className="bg-transparent border-none p-0 text-xs font-medium flex-grow focus:outline-none text-[#1a1c1f] placeholder:text-[#c6c5d1]"
             />
           </div>
         </section>
@@ -657,7 +656,7 @@ export default function AddTransactionPage() {
         <button
           onClick={handleSave}
           disabled={totalAmount <= 0}
-          className={`w-full py-5 rounded-[2rem] font-headline font-black text-lg transition-all active:scale-[0.98] shadow-xl ${
+          className={`w-full py-4 rounded-xl font-headline font-black text-base transition-all active:scale-[0.98] shadow-lg outline-none ${
             totalAmount <= 0
               ? "bg-[#c6c5d1] text-white"
               : transactionType === "expense"
@@ -665,22 +664,9 @@ export default function AddTransactionPage() {
               : "bg-[#10b981] text-white shadow-[#10b981]/30"
           }`}
         >
-          {selectedCategory === "group" && transactionType === "expense"
-            ? "Lưu & Chia tiền nhóm"
-            : "Xác nhận lưu"}
+          Xác nhận lưu
         </button>
       </div>
-
-      {/* Ảnh OCR Preview */}
-      {ocrPreview && (
-        <div className="fixed bottom-32 right-6 w-14 h-18 rounded-lg border-2 border-white shadow-xl overflow-hidden z-40 rotate-6">
-          <img
-            src={ocrPreview}
-            alt="Bill Preview"
-            className="w-full h-full object-cover"
-          />
-        </div>
-      )}
     </main>
   );
 }
