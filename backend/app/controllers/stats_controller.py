@@ -21,7 +21,7 @@ async def get_stats(
     service: StatsService = Depends(get_stats_service),
 ):
     """
-    Lấy số liệu thống kê chi tiêu và thu nhập chi tiết theo từng danh mục trong tháng/năm chỉ định.
+    Lấy số liệu thống kê chi tiêu theo từng danh mục trong tháng/năm chỉ định.
     """
     return await service.get_stats_by_category(current_user.user_id, month, year)
 
@@ -33,20 +33,21 @@ async def get_trend(
     service: StatsService = Depends(get_stats_service),
 ):
     """
-    Phân tích xu hướng biến động tài chính (theo tuần, tháng, năm) dựa trên một mốc thời gian cụ thể.
+    Phân tích xu hướng chi tiêu từ đầu năm đến hiện tại.
+    - **day**: từng ngày từ 01/01 → hôm nay
+    - **week**: từng tuần (01/01-07/01, ...) → tuần hiện tại
+    - **month**: từng tháng T1 → tháng hiện tại
     """
     try:
         result = await service.get_trend(
             user_id=current_user.user_id,
             period_type=query.period_type,
-            target_date=query.target_date,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return TrendResponse(
         period_type=query.period_type,
-        target_date=query.target_date,
         chart_data=[ChartDataPoint(**point) for point in result["chart_data"]],
         highest_label=result["highest_label"],
         highest_amount=result["highest_amount"],
