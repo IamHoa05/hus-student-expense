@@ -33,8 +33,14 @@ class BudgetResponseSchema(BaseModel):       # ✅ Tách riêng, không kế th�
         from_attributes = True
 
 class BudgetAllocationResponse(BaseModel):
+    category_id: int
     category_name: str
+    icon: Optional[str] = None
     amount_limit: float
     spent_amount: float
     percentage: float
     remaining_amount: float
+    alert_threshold: float  # <--- THÊM DÒNG NÀY
+
+    class Config:
+        from_attributes = True

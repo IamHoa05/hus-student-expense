@@ -6,28 +6,38 @@ from ..models.user import User
 from ..models.category import TransactionType
 from ..schemas.category import (
     CategoryResponseSchema, CategoryCreateSchema,
-    CategoryUpdateSchema, CategoryStatResponse
+    CategoryUpdateSchema
 )
 from ..services.category_service import CategoryService, get_category_service
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
-# LẤY DANH SÁCH DANH MỤC
+
+# =============================================================================
+# QUẢN LÝ DANH MỤC (CATEGORIES)
+# =============================================================================
+
 @router.get("", response_model=List[CategoryResponseSchema])
 async def list_categories(
-    type: TransactionType = Query(default=TransactionType.OUTFLOW),  # ✅ Enum, có validate
+    type: TransactionType = Query(default=TransactionType.OUTFLOW),
     current_user: User = Depends(require_user),
     service: CategoryService = Depends(get_category_service)
 ):
+    """
+    Lấy danh sách các danh mục chi tiêu hoặc thu nhập dựa theo phân loại.
+    """
     return await service.get_categories_by_type(current_user.user_id, type)
 
-# TẠO DANH MỤC CÁ NHÂN
+
 @router.post("", response_model=CategoryResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_category(
     payload: CategoryCreateSchema,
     current_user: User = Depends(require_user),
     service: CategoryService = Depends(get_category_service)
 ):
+    """
+    Tạo mới một danh mục phân loại chi tiêu hoặc thu nhập cá nhân.
+    """
     return await service.create_custom_category(
         user_id=current_user.user_id,
         name=payload.name,
@@ -35,7 +45,7 @@ async def create_category(
         icon=payload.icon
     )
 
-# CẬP NHẬT DANH MỤC
+
 @router.put("/{category_id}", response_model=CategoryResponseSchema)
 async def update_category(
     category_id: int,
@@ -43,6 +53,9 @@ async def update_category(
     current_user: User = Depends(require_user),
     service: CategoryService = Depends(get_category_service)
 ):
+    """
+    Cập nhật lại thông tin tên hoặc biểu tượng (icon) của một danh mục hiện có.
+    """
     return await service.update_category(
         category_id=category_id,
         user_id=current_user.user_id,
@@ -50,22 +63,15 @@ async def update_category(
         icon=payload.icon
     )
 
-# XÓA DANH MỤC
+
 @router.delete("/{category_id}")
 async def delete_category(
     category_id: int,
     current_user: User = Depends(require_user),
     service: CategoryService = Depends(get_category_service)
 ):
+    """
+    Xóa bỏ một danh mục chi tiêu hoặc thu nhập cá nhân khỏi hệ thống.
+    """
     await service.delete_category(category_id, current_user.user_id)
     return {"message": "Đã xóa danh mục thành công"}
-
-# THỐNG KÊ THEO DANH MỤC (Trend Analysis)
-@router.get("/statistics", response_model=List[CategoryStatResponse])
-async def get_stats(
-    month: int = Query(..., ge=1, le=12),
-    year: int = Query(..., ge=1970),
-    current_user: User = Depends(require_user),
-    service: CategoryService = Depends(get_category_service)
-):
-    return await service.get_stats_by_category(current_user.user_id, month, year)

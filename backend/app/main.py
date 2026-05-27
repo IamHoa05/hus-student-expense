@@ -18,6 +18,7 @@ from app.controllers.auth_controller import router as auth_router
 from app.controllers.transaction_controller import router as transaction_router
 from app.controllers.category_controller import router as category_router
 from app.controllers.budget_controller import router as budget_router
+from app.controllers.stats_controller import router as stats_router
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
@@ -57,3 +58,4 @@ app.include_router(auth_router)
 app.include_router(transaction_router)
 app.include_router(category_router)
 app.include_router(budget_router)
+app.include_router(stats_router) 

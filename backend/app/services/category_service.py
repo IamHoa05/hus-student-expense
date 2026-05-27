@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from sqlalchemy import func, delete, update, select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException
@@ -76,44 +77,7 @@ class CategoryService:
         await self.db.commit()
         return True
 
-    # ✅ Mở lại — phục vụ Trend Analysis
-    async def get_stats_by_category(self, user_id: int, month: int, year: int):
-        total_stmt = select(func.sum(Transaction.total_amount)).where(
-            and_(
-                Transaction.user_id == user_id,
-                Transaction.transaction_type == TransactionType.OUTFLOW,
-                func.extract('month', Transaction.transaction_date) == month,
-                func.extract('year', Transaction.transaction_date) == year
-            )
-        )
-        total_res = await self.db.execute(total_stmt)
-        grand_total = float(total_res.scalar() or 0)
-
-        if grand_total == 0:
-            return []
-
-        stmt = select(
-            Category.category_name,
-            func.sum(Transaction.total_amount).label("category_total")
-        ).join(Transaction, Transaction.category_id == Category.category_id).where(
-            and_(
-                Transaction.user_id == user_id,
-                Transaction.transaction_type == TransactionType.OUTFLOW,
-                func.extract('month', Transaction.transaction_date) == month,
-                func.extract('year', Transaction.transaction_date) == year
-            )
-        ).group_by(Category.name).order_by(func.sum(Transaction.total_amount).desc())
-
-        result = await self.db.execute(stmt)
-        return [
-            {
-                "name": row.category_name,
-                "total": float(row.category_total),
-                "percentage": round((float(row.category_total) / grand_total) * 100, 2)
-            }
-            for row in result
-        ]
-
-
+    
+    
 async def get_category_service(db: AsyncSession = Depends(get_db)):
     return CategoryService(db)

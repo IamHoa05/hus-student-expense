@@ -85,7 +85,12 @@ class BudgetService:
         }
 
     async def get_budget_allocation(self, user_id: int, month: int, year: int):
-        stmt = select(Budget, Category.category_name).join(
+        stmt = select(
+            Budget, 
+            Category.category_id, 
+            Category.category_name, 
+            Category.icon
+        ).join(
             Category, Budget.category_id == Category.category_id
         ).where(
             and_(
@@ -99,7 +104,7 @@ class BudgetService:
         budgets = result.all()
 
         allocation_data = []
-        for budget_obj, cat_name in budgets:
+        for budget_obj, cat_id, cat_name, icon in budgets:
             spent = await self._calc_spent(
                 user_id, budget_obj.category_id,
                 budget_obj.start_date, budget_obj.end_date
@@ -107,12 +112,19 @@ class BudgetService:
             limit = float(budget_obj.amount_limit)
             percentage = round((spent / limit) * 100, 1) if limit > 0 else 0
 
+            # Lấy giá trị alert_threshold từ model Budget (ép kiểu float/int tùy cấu trúc DB của bạn)
+            # Thêm giá trị mặc định (ví dụ: 80.0) nếu trường này được phép null trong DB
+            alert_threshold = float(budget_obj.alert_threshold) if budget_obj.alert_threshold is not None else 80.0
+
             allocation_data.append({
+                "category_id": cat_id,
                 "category_name": cat_name,
+                "icon": icon,
                 "amount_limit": limit,
                 "spent_amount": spent,
                 "percentage": percentage,
-                "remaining_amount": max(0, limit - spent)
+                "remaining_amount": max(0, limit - spent),
+                "alert_threshold": alert_threshold  # <--- TRẢ VỀ THÊM TRƯỜNG NÀY
             })
 
         return sorted(allocation_data, key=lambda x: x['percentage'], reverse=True)

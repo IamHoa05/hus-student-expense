@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 from enum import Enum
 
 class TransactionType(str, Enum):
@@ -26,7 +26,3 @@ class CategoryResponseSchema(BaseModel):
     class Config:
         from_attributes = True
 
-class CategoryStatResponse(BaseModel):
-    category_name: str                            # ✅
-    total: float
-    percentage: float
