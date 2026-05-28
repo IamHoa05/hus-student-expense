@@ -52,6 +52,8 @@ export default function AddTransactionPage() {
     new Date().toISOString().split("T")[0]
   );
   const [note, setNote] = useState<string>("");
+
+  // State cho hạng mục tạo mới bằng tay (Chỉ dùng bên Chi tiêu)
   const [customCategory, setCustomCategory] = useState("");
 
   // States API Hạng mục
@@ -102,7 +104,6 @@ export default function AddTransactionPage() {
           };
         };
 
-        // BỘ LỌC: Loại bỏ các hạng mục rác có tên chứa chữ "string" từ Backend
         const finalOut = Array.isArray(outData)
           ? outData
               .map(mapIcon)
@@ -116,14 +117,6 @@ export default function AddTransactionPage() {
 
         setExpenseCategories(finalOut);
         setIncomeCategories(finalIn);
-
-        // Đặt mặc định danh mục đang chọn
-        if (transactionType === "expense" && finalOut.length > 0) {
-          setSelectedCategory(finalOut[0].category_id.toString());
-        }
-        if (transactionType === "income" && finalIn.length > 0) {
-          setSelectedCategory(finalIn[0].category_id.toString());
-        }
       } catch (error) {
         console.error("Lỗi lấy categories:", error);
       } finally {
@@ -134,13 +127,16 @@ export default function AddTransactionPage() {
     fetchCategories();
   }, []);
 
+  // Tự động chọn mục đầu tiên khi chuyển tab hoặc tải xong data (nếu ô custom đang trống)
   useEffect(() => {
-    if (transactionType === "expense" && expenseCategories.length > 0) {
-      setSelectedCategory(expenseCategories[0].category_id.toString());
-    } else if (transactionType === "income" && incomeCategories.length > 0) {
-      setSelectedCategory(incomeCategories[0].category_id.toString());
+    if (customCategory.trim() === "") {
+      if (transactionType === "expense" && expenseCategories.length > 0) {
+        setSelectedCategory(expenseCategories[0].category_id.toString());
+      } else if (transactionType === "income" && incomeCategories.length > 0) {
+        setSelectedCategory(incomeCategories[0].category_id.toString());
+      }
     }
-  }, [transactionType, expenseCategories, incomeCategories]);
+  }, [transactionType, expenseCategories, incomeCategories, customCategory]);
 
   // =======================================================================
   // LOGIC SẢN PHẨM & OCR
@@ -187,7 +183,6 @@ export default function AddTransactionPage() {
       };
       reader.readAsDataURL(file);
 
-      // Lưu lại timeout để có thể hủy nếu người dùng ấn X sớm
       scanTimeoutRef.current = setTimeout(() => {
         setIsScanning(false);
         setIsManualMode(false);
@@ -200,7 +195,6 @@ export default function AddTransactionPage() {
     }
   };
 
-  // Hàm Hủy bỏ ảnh (Reset toàn bộ quá trình OCR về nhập thủ công)
   const handleRemoveImage = () => {
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     setIsScanning(false);
@@ -210,21 +204,50 @@ export default function AddTransactionPage() {
     setProducts([
       { id: Date.now(), name: note || "Giao dịch thủ công", qty: 1, price: 0 },
     ]);
-
-    // Reset lại value của input file để có thể chọn lại chính ảnh vừa xóa
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // =======================================================================
-  // LƯU API (POST)
+  // LƯU GIAO DỊCH (POST) & TẠO HẠNG MỤC NẾU CẦN
   // =======================================================================
   const handleSave = async () => {
     if (totalAmount <= 0) return alert("Vui lòng nhập số tiền!");
-    if (!selectedCategory)
-      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
 
+    let finalCategoryId = parseInt(selectedCategory);
     const isIncome = transactionType === "income";
 
+    // NẾU NGƯỜI DÙNG TẠO HẠNG MỤC MỚI BÊN CHI TIÊU -> Gọi API tạo trước
+    if (!isIncome && customCategory.trim() !== "") {
+      try {
+        const catRes = await fetch(`${API_URL}/categories`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: customCategory.trim(), // Sửa thành name cho khớp Backend
+            transaction_type: "outflow",
+            icon: "category", // Icon mặc định cho danh mục tự tạo
+          }),
+        });
+
+        if (!catRes.ok) {
+          const err = await catRes.json();
+          return alert(
+            `❌ Lỗi tạo hạng mục mới: ${err.detail || JSON.stringify(err)}`
+          );
+        }
+
+        const newCat = await catRes.json();
+        finalCategoryId = newCat.category_id;
+      } catch (error) {
+        console.error("Lỗi tạo hạng mục:", error);
+        return alert("❌ Lỗi kết nối khi tạo hạng mục mới!");
+      }
+    } else if (!selectedCategory) {
+      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
+    }
+
+    // TẠO GIAO DỊCH
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
       .getMinutes()
@@ -233,9 +256,8 @@ export default function AddTransactionPage() {
 
     const payload = {
       amount: totalAmount,
-      category_id: parseInt(selectedCategory),
+      category_id: finalCategoryId,
       note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
-      // Ghép ngày chọn trên lịch với giờ hiện tại
       transaction_date: `${date}T${currentTime}`,
       transaction_type: isIncome ? "inflow" : "outflow",
     };
@@ -288,7 +310,10 @@ export default function AddTransactionPage() {
         {/* Toggle Thu/Chi */}
         <section className="flex p-1 bg-[#ededf2] rounded-full w-full shadow-inner">
           <button
-            onClick={() => setTransactionType("expense")}
+            onClick={() => {
+              setTransactionType("expense");
+              setCustomCategory(""); // Reset category input
+            }}
             className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "expense"
                 ? "bg-white text-[#4b5b9a] shadow-md"
@@ -298,7 +323,10 @@ export default function AddTransactionPage() {
             Khoản chi
           </button>
           <button
-            onClick={() => setTransactionType("income")}
+            onClick={() => {
+              setTransactionType("income");
+              setCustomCategory(""); // Reset category input
+            }}
             className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "income"
                 ? "bg-white text-[#10b981] shadow-md"
@@ -359,7 +387,6 @@ export default function AddTransactionPage() {
                   </>
                 )}
 
-                {/* Input file bị ẩn, chỉ clickable khi CHƯA có ảnh */}
                 {!hasUploadedImage && (
                   <input
                     ref={fileInputRef}
@@ -371,7 +398,6 @@ export default function AddTransactionPage() {
                 )}
               </div>
 
-              {/* Spinner hiển thị đè lên khi đang quét ảnh */}
               {isScanning && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-2xl z-10 backdrop-blur-sm pointer-events-none">
                   <div className="flex flex-col items-center gap-3">
@@ -523,9 +549,10 @@ export default function AddTransactionPage() {
                     expenseCategories.map((cat: any) => (
                       <button
                         key={cat.category_id}
-                        onClick={() =>
-                          setSelectedCategory(cat.category_id.toString())
-                        }
+                        onClick={() => {
+                          setSelectedCategory(cat.category_id.toString());
+                          setCustomCategory(""); // Xóa text custom
+                        }}
                         className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all outline-none ${
                           selectedCategory === cat.category_id.toString()
                             ? "bg-[#4b5b9a] text-white shadow-md shadow-[#4b5b9a]/20 scale-105"
@@ -542,11 +569,17 @@ export default function AddTransactionPage() {
                     ))
                   )}
                 </div>
+                {/* Chỉ có tab Chi Tiêu mới được tạo Hạng Mục Khác */}
                 <input
                   type="text"
                   placeholder="Tên hạng mục khác..."
                   value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCustomCategory(e.target.value);
+                    if (e.target.value.trim() !== "") {
+                      setSelectedCategory(""); // Bỏ chọn hạng mục ở trên
+                    }
+                  }}
                   className="w-full px-4 py-3.5 bg-[#f3f3f8] rounded-xl border-none text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#4b5b9a]/40 placeholder:italic placeholder:font-medium"
                 />
               </div>
@@ -561,7 +594,7 @@ export default function AddTransactionPage() {
               <label className="text-[9px] font-black uppercase text-[#10b981] tracking-widest">
                 Số tiền nhận được
               </label>
-              <div className="relative flex items-center border-b border-[#e2e2e7] pb-2 transition-all focus-within:border-[#10b981]">
+              <div className="relative flex items-end border-b border-[#e2e2e7] pb-2 transition-all focus-within:border-[#10b981]">
                 <span className="text-3xl font-black text-[#10b981] mr-3 underline decoration-2 underline-offset-4">
                   ₫
                 </span>
@@ -582,7 +615,7 @@ export default function AddTransactionPage() {
                 />
               </div>
 
-              {/* Hạng mục Thu nhập */}
+              {/* Hạng mục Thu nhập (Không có ô tạo mục mới) */}
               <div className="pt-5 space-y-4 border-t border-[#f3f3f8]">
                 <p className="text-[9px] font-black uppercase text-[#10b981] tracking-widest text-center">
                   Chọn hạng mục thu nhập
@@ -662,9 +695,9 @@ export default function AddTransactionPage() {
         {/* Nút Save */}
         <button
           onClick={handleSave}
-          disabled={totalAmount <= 0}
+          disabled={totalAmount <= 0 && isManualMode} // Block nếu không nhập tiền ở Manual Mode
           className={`w-full py-4 rounded-xl font-headline font-black text-base transition-all active:scale-[0.98] shadow-lg outline-none ${
-            totalAmount <= 0
+            totalAmount <= 0 && isManualMode
               ? "bg-[#c6c5d1] text-white"
               : transactionType === "expense"
               ? "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/30"

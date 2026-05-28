@@ -241,6 +241,45 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {/* =========================================
+          BANNER QUẢNG CÁO TÍNH NĂNG OCR (MỚI THÊM) 
+      ========================================= */}
+      <div className="bg-gradient-to-r from-[#dde1ff]/80 to-[#f3f3f8] p-4 rounded-2xl border border-[#e2e2e7]/60 shadow-sm flex items-center justify-between gap-4 mb-5 relative overflow-hidden group">
+        {/* Icon Trang trí */}
+        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shrink-0 shadow-sm z-10 border border-[#e2e2e7]/30">
+          <span className="material-symbols-outlined text-[#4b5b9a] text-2xl group-hover:scale-110 transition-transform">
+            document_scanner
+          </span>
+        </div>
+
+        {/* Nội dung chữ */}
+        <div className="flex-grow z-10">
+          <h3 className="font-headline font-bold text-sm text-[#1a1c1f]">
+            Quét hóa đơn thông minh
+          </h3>
+          <p className="text-[10px] text-[#616470] mt-0.5 leading-relaxed font-medium">
+            Không cần nhập tay! Chụp ảnh hóa đơn để hệ thống tự động điền chi
+            tiêu.
+          </p>
+        </div>
+
+        {/* Nút Call-to-action */}
+        <Link
+          href="/add"
+          className="shrink-0 bg-[#4b5b9a] text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-[#4b5b9a]/20 z-10 outline-none focus:outline-none"
+        >
+          Thử ngay
+        </Link>
+
+        {/* Watermark mờ ở góc phải background */}
+        <div className="absolute -right-4 -bottom-4 opacity-[0.03] pointer-events-none z-0 transform rotate-12">
+          <span className="material-symbols-outlined text-8xl">
+            receipt_long
+          </span>
+        </div>
+      </div>
+      {/* ========================================= */}
+
       {/* CATEGORY */}
       <div className="bg-white p-4 rounded-2xl border border-[#e2e2e7]/60 shadow-sm">
         <h2 className="font-bold text-base mb-3">Phân bổ chi tiêu</h2>
@@ -252,7 +291,9 @@ export default function DashboardPage() {
             return (
               <Link
                 key={category.id}
-                href={`/analytics/${category.id}`}
+                href={`/analytics/${category.id}?name=${encodeURIComponent(
+                  category.name
+                )}`}
                 className="flex gap-3 p-3 rounded-xl border border-[#e2e2e7]/40"
               >
                 <div
