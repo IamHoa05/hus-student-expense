@@ -15,15 +15,27 @@ router = APIRouter(prefix="/budgets", tags=["Budgets"])
 # =============================================================================
 
 @router.post("", response_model=BudgetResponseSchema)
-async def create_or_update_budget(
+async def create_budget(
     payload: BudgetCreateSchema,
     current_user: User = Depends(require_user),
     service: BudgetService = Depends(get_budget_service)
 ):
     """
-    Thiết lập mới hoặc cập nhật cấu hình ngân sách của người dùng.
+    Tạo mới ngân sách cho danh mục trong tháng chỉ định.
     """
-    return await service.set_budget(current_user.user_id, payload)
+    return await service.create_budget(current_user.user_id, payload)
+
+
+@router.patch("", response_model=BudgetResponseSchema)
+async def update_budget(
+    payload: BudgetCreateSchema,
+    current_user: User = Depends(require_user),
+    service: BudgetService = Depends(get_budget_service)
+):
+    """
+    Cập nhật cấu hình ngân sách đang active của người dùng.
+    """
+    return await service.update_budget(current_user.user_id, payload)
 
 
 # =============================================================================
@@ -54,14 +66,11 @@ async def get_remaining_budget(
     Kiểm tra số dư ngân sách còn lại của tháng hiện tại hoặc một tháng cụ thể.
     """
     today = date.today()
-    return {
-        "status": "success",
-        "data": await service.get_remaining_budget(
-            current_user.user_id,
-            month or today.month,
-            year or today.year
-        )
-    }
+    return await service.get_remaining_budget(
+        current_user.user_id,
+        month or today.month,
+        year or today.year
+    )
 
 
 # =============================================================================
@@ -80,13 +89,10 @@ async def get_history(
     """
     if start_date > end_date:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ngày bắt đầu không được lớn hơn ngày kết thúc"
         )
-    return {
-        "status": "success",
-        "data": await service.get_custom_range_history(current_user.user_id, start_date, end_date)
-    }
+    return await service.get_custom_range_history(current_user.user_id, start_date, end_date)
 
 
 @router.get("/comparison")
@@ -98,7 +104,4 @@ async def get_comparison(
     """
     So sánh tình hình chi tiêu và sử dụng ngân sách giữa tháng hiện tại với tháng trước đó.
     """
-    return {
-        "status": "success",
-        "data": await service.get_spending_comparison(current_user.user_id, target_date)
-    }
+    return await service.get_spending_comparison(current_user.user_id, target_date)

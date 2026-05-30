@@ -6,7 +6,7 @@ from ..config.database import get_db
 from ..schemas.auth import (
     UserRegister, UserLogin, OAuth2Token,
     ForgotPasswordRequest, VerifyOTPRequest,
-    ResetPasswordRequest, RefreshTokenRequest
+    ResetPasswordRequest, RefreshTokenRequest, UpdateUserRequest
 )
 from ..services.auth_service import get_auth_service, AuthService
 from ..services.gg_auth_service import GoogleAuthService, get_google_auth_service
@@ -219,3 +219,12 @@ async def get_me(current_user: User = Depends(require_user)):
         "phone": current_user.phone,
         "avt_url": current_user.avt_url
     }
+
+@router.patch("/me")
+async def update_me(
+    body: UpdateUserRequest,
+    current_user: User = Depends(require_user),
+    service: AuthService = Depends(get_auth_service)
+):
+    """Cập nhật thông tin tài khoản của người dùng hiện tại đang đăng nhập."""
+    return await service.update_me(current_user, body)

@@ -81,7 +81,7 @@ class StatsService:
                 Transaction.user_id == user_id,
                 Transaction.transaction_type == TransactionType.OUTFLOW,
                 Transaction.transaction_date >= start_date,
-                Transaction.transaction_date <= today,
+                Transaction.transaction_date < today + timedelta(days=1),  # fix: < ngày mai
             )
         ).group_by(func.date(Transaction.transaction_date))
 
@@ -111,7 +111,7 @@ class StatsService:
         today = date.today()
         year = today.year
         start_of_year = date(year, 1, 1)
-
+        final_end = today
         # Lùi về thứ 2 của tuần chứa 01/01
         week_start = start_of_year - timedelta(days=start_of_year.weekday())
         # Tuần cuối kết thúc tại hôm nay
@@ -142,8 +142,8 @@ class StatsService:
                 Transaction.user_id == user_id,
                 Transaction.transaction_type == TransactionType.OUTFLOW,
                 Transaction.transaction_date >= range_start,
-                Transaction.transaction_date <= range_end,
-            )
+                Transaction.transaction_date < final_end + timedelta(days=1),  # fix
+        )
         ).group_by(func.date(Transaction.transaction_date))
 
         result = await self.db.execute(stmt)

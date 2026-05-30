@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import date
 
 from ..middleware.auth import require_user
 from ..models.user import User
@@ -38,6 +39,23 @@ async def get_transactions(
     return {"status": "success", "data": transactions}
 
 
+@router.get("/invoices")
+async def get_invoices_by_month(
+    month: int = Query(default=None, ge=1, le=12),
+    year: int = Query(default=None, ge=1970),
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
+):
+    """
+    Lấy tất cả ảnh hóa đơn OCR của người dùng trong tháng chỉ định.
+    """
+    today = date.today()
+    return await service.get_invoices_by_month(
+        current_user.user_id,
+        month or today.month,
+        year or today.year
+    )
+
 @router.get("/{transaction_id}", status_code=status.HTTP_200_OK)
 async def get_transaction(
     transaction_id: int,
@@ -75,3 +93,18 @@ async def delete_transaction(
     Xóa bỏ hoàn toàn một giao dịch tài chính khỏi hệ thống.
     """
     return await service.delete_transaction(current_user.user_id, transaction_id)
+
+
+
+
+@router.get("/{transaction_id}/invoice")
+async def get_invoice_image(
+    transaction_id: int,
+    current_user: User = Depends(require_user),
+    service: TransactionService = Depends(get_transaction_service)
+):
+    """
+    Trả về link ảnh hóa đơn đã quét của giao dịch.
+    """
+    return await service.get_invoice_image(current_user.user_id, transaction_id)
+

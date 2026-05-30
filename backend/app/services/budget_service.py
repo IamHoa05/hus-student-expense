@@ -30,7 +30,40 @@ class BudgetService:
         result = await self.db.execute(stmt)
         return float(result.scalar() or 0)
 
-    async def set_budget(self, user_id: int, data: BudgetCreateSchema):
+    async def create_budget(self, user_id: int, data: BudgetCreateSchema):
+        # Kiểm tra đã tồn tại budget cùng category trong tháng chưa
+        stmt = select(Budget).where(
+            and_(
+                Budget.user_id == user_id,
+                Budget.category_id == data.category_id,
+                Budget.is_active == True,
+                func.extract('month', Budget.start_date).cast(Integer) == data.start_date.month,
+                func.extract('year', Budget.start_date).cast(Integer) == data.start_date.year
+            )
+        )
+        result = await self.db.execute(stmt)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(status_code=400, detail="Budget cho danh mục này trong tháng đã tồn tại")
+
+        budget_obj = Budget(
+            user_id=user_id,
+            category_id=data.category_id,
+            amount_limit=data.amount_limit,
+            start_date=data.start_date,
+            end_date=data.end_date,
+            period=data.period,
+            alert_threshold=data.alert_threshold
+        )
+        self.db.add(budget_obj)
+        await self.db.commit()
+        await self.db.refresh(budget_obj)
+
+        return await self._build_budget_response(user_id, budget_obj)
+
+
+    async def update_budget(self, user_id: int, data: BudgetCreateSchema):
         # Tìm budget đang active cùng category trong tháng
         stmt = select(Budget).where(
             and_(
@@ -44,29 +77,24 @@ class BudgetService:
         result = await self.db.execute(stmt)
         budget_obj = result.scalar_one_or_none()
 
-        if budget_obj:
-            budget_obj.amount_limit = data.amount_limit
-            budget_obj.start_date = data.start_date
-            budget_obj.end_date = data.end_date
-            budget_obj.alert_threshold = data.alert_threshold
-            budget_obj.alert_sent = False  # ✅ Reset alert khi cập nhật hạn mức mới
-        else:
-            budget_obj = Budget(
-                user_id=user_id,
-                category_id=data.category_id,
-                amount_limit=data.amount_limit,
-                start_date=data.start_date,
-                end_date=data.end_date,
-                period=data.period,
-                alert_threshold=data.alert_threshold
-            )
-            self.db.add(budget_obj)
+        if not budget_obj:
+            raise HTTPException(status_code=404, detail="Không tìm thấy budget để cập nhật")
+
+        budget_obj.amount_limit = data.amount_limit
+        budget_obj.start_date = data.start_date
+        budget_obj.end_date = data.end_date
+        budget_obj.alert_threshold = data.alert_threshold
+        budget_obj.alert_sent = False  # Reset alert khi cập nhật hạn mức mới
 
         await self.db.commit()
         await self.db.refresh(budget_obj)
 
-        # ✅ Tính động sau commit, không lưu vào DB
-        spent = await self._calc_spent(user_id, data.category_id, data.start_date, data.end_date)
+        return await self._build_budget_response(user_id, budget_obj)
+
+
+    # Helper dùng chung cho cả create và update
+    async def _build_budget_response(self, user_id: int, budget_obj: Budget) -> dict:
+        spent = await self._calc_spent(user_id, budget_obj.category_id, budget_obj.start_date, budget_obj.end_date)
         limit = float(budget_obj.amount_limit)
 
         return {
@@ -256,7 +284,6 @@ class BudgetService:
         )
         result = await self.db.execute(stmt)
         return float(result.scalar() or 0)
-
 
 async def get_budget_service(db: AsyncSession = Depends(get_db)):
     return BudgetService(db)

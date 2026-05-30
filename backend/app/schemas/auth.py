@@ -37,3 +37,8 @@ class VerifyOTPRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=6)
     confirm_password: str
+
+
+class UpdateUserRequest(BaseModel):
+    full_name: str | None = None
+    avt_url: str | None = None
