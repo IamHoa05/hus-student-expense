@@ -49,6 +49,13 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    # config/settings.py — thêm các field Minio vào Settings hiện tại
+    MINIO_ENDPOINT: str = "transminer-minio:9000"   # fix: đúng tên container
+    MINIO_PUBLIC_ENDPOINT: str = "localhost:9004"    # fix: đúng port expose ra ngoài
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin123"
+    MINIO_SECURE: bool = False
+    MINIO_BUCKET_NAME: str = "student-expense-bucket"
 @lru_cache()
 def get_settings():
     return Settings()

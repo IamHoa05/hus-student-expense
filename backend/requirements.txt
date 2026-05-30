@@ -25,3 +25,12 @@ itsdangerous==2.2.0
 
 # Middleware
 python-multipart==0.0.12
+
+# Storage
+boto3==1.28.57
+
+# Export
+openpyxl==3.1.5
+
+# Notifications
+alembic

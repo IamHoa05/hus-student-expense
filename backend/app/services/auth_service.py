@@ -4,7 +4,7 @@ from sqlalchemy import select, or_
 
 from ..config.database import get_db
 from ..models.user import User
-from ..schemas.auth import UserRegister, UserLogin
+from ..schemas.auth import UserRegister, UserLogin, UpdateUserRequest
 from ..utils.security import (
     hash_password, verify_password, create_access_token,
     verify_refresh_token, decode_token, issue_token
@@ -157,6 +157,15 @@ class AuthService:
         response.delete_cookie("refresh_token", path="/auth/refresh")
         return {"message": "Đăng xuất thành công"}
 
+    # --- CẬP NHẬT THÔNG TIN NGƯỜI DÙNG ---
+    async def update_me(self, current_user: User, data: UpdateUserRequest) -> User:
+        if data.full_name is not None:
+            current_user.full_name = data.full_name
+        if data.avt_url is not None:
+            current_user.avt_url = data.avt_url
 
+        await self.db.commit()
+        await self.db.refresh(current_user)
+        return current_user
 async def get_auth_service(db: AsyncSession = Depends(get_db)):
     return AuthService(db)

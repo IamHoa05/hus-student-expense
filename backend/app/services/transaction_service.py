@@ -1,30 +1,46 @@
-from sqlalchemy import select, and_ 
+from sqlalchemy import select, and_ , extract
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException, status
 from datetime import datetime
-from ..models.category import Category
+
+from .notification_service import NotificationService
+from ..models.category import Category, TransactionType
 from ..models.transaction import Transaction, TransactionDetail, TransactionMedia
 from ..config.database import get_db
-from ..schemas.transaction import TransactionCreateSchema, TransactionUpdateSchema, TransactionResponseSchema, TransactionsByDateSchema, TransactionsGroupedResponseSchema, TransactionDetailResponseSchema
+from ..schemas.transaction import (
+    TransactionCreateSchema, 
+    TransactionUpdateSchema, 
+    TransactionResponseSchema, 
+    TransactionsByDateSchema, 
+    TransactionsGroupedResponseSchema, 
+    TransactionDetailResponseSchema, 
+    TransactionSource
+)
+  
 from zoneinfo import ZoneInfo
 from collections import defaultdict
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 class TransactionService:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.notif_service = NotificationService(db)
 
     async def create_transaction(self, user_id: int, data: TransactionCreateSchema) -> TransactionResponseSchema:
         try:
-            vn_tz = ZoneInfo("Asia/Ho_Chi_Minh")
+            dt = data.transaction_date
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+            transaction_date = dt.astimezone(VN_TZ).replace(tzinfo=None)
 
             new_trans = Transaction(
                 user_id=user_id,
                 category_id=data.category_id,
                 total_amount=data.amount,
                 transaction_type=data.transaction_type,
-                # Convert sang VN rồi mới strip tz → DB lưu đúng giờ VN dạng naive
-                transaction_date=data.transaction_date.astimezone(vn_tz).replace(tzinfo=None),
-                updated_at=datetime.now(),
+                transaction_date=transaction_date,
+                updated_at=datetime.now(VN_TZ).replace(tzinfo=None),  # ← sửa datetime.now()
                 source=data.source,
             )
             self.db.add(new_trans)
@@ -36,17 +52,35 @@ class TransactionService:
             )
             self.db.add(new_detail)
 
+            category = await self.db.get(Category, new_trans.category_id)
+
+            # ── Notification ─────────────────────────────────
+            await self.notif_service.on_transaction_created(
+                user_id=user_id,
+                amount=new_trans.total_amount,
+                category_name=category.category_name if category else "Khác",
+                transaction_type=new_trans.transaction_type,
+                transaction_id=new_trans.transaction_id,
+            )
+
+            if data.transaction_type == TransactionType.OUTFLOW and data.category_id:
+                await self.notif_service.check_budget_alert(
+                    user_id=user_id,
+                    category_id=data.category_id,
+                    category_name=category.category_name if category else "Khác",
+                    transaction_date=new_trans.transaction_date,
+                )
+            # ─────────────────────────────────────────────────
+
             await self.db.commit()
             await self.db.refresh(new_trans)
-
-            category = await self.db.get(Category, new_trans.category_id)
 
             return TransactionResponseSchema(
                 transaction_id=new_trans.transaction_id,
                 category_id=new_trans.category_id,
                 amount=new_trans.total_amount,
                 transaction_type=new_trans.transaction_type,
-                transaction_date=new_trans.transaction_date,  # ✅ fix: created_at -> transaction_date
+                transaction_date=new_trans.transaction_date,
                 icon=category.icon if category else None,
                 category_name=category.category_name if category else None,
                 is_settled=False,
@@ -80,11 +114,8 @@ class TransactionService:
 
         for row in rows:
             trans_dt = row.Transaction.transaction_date
-            if trans_dt.tzinfo is None:
-                trans_dt = trans_dt.replace(tzinfo=ZoneInfo("UTC"))
-            vn_dt = trans_dt.astimezone(vn_tz)
-            date_key = vn_dt.strftime("%Y-%m-%d")
-
+            date_key = trans_dt.strftime("%Y-%m-%d")
+            
             grouped[date_key].append(
                 TransactionResponseSchema(
                     transaction_id=row.Transaction.transaction_id,
@@ -161,6 +192,65 @@ class TransactionService:
         await self.db.commit()
         return {"message": "Đã xóa giao dịch"}
 
+    async def get_invoice_image(self, user_id: int, transaction_id: int) -> dict:
+        # Kiểm tra transaction thuộc về user
+        stmt = select(Transaction).where(
+            Transaction.transaction_id == transaction_id,
+            Transaction.user_id == user_id
+        )
+        result = await self.db.execute(stmt)
+        transaction = result.scalar_one_or_none()
 
+        if not transaction:
+            raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
+
+        # Lấy media
+        stmt = select(TransactionMedia).where(
+            TransactionMedia.transaction_id == transaction_id
+        )
+        result = await self.db.execute(stmt)
+        media = result.scalar_one_or_none()
+
+        if not media or not media.image_url:
+            raise HTTPException(status_code=404, detail="Giao dịch này không có ảnh hóa đơn")
+
+        return {
+            "transaction_id": transaction_id,
+            "image_url": media.image_url,
+            "is_settled": media.is_settled
+        }
+    
+    async def get_invoices_by_month(self, user_id: int, month: int, year: int) -> list:
+        stmt = (
+            select(Transaction, TransactionMedia)
+            .join(TransactionMedia, Transaction.transaction_id == TransactionMedia.transaction_id)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.source == TransactionSource.OCR,
+                extract("month", Transaction.transaction_date) == month,
+                extract("year", Transaction.transaction_date) == year,
+                TransactionMedia.image_url.isnot(None),
+            )
+            .order_by(Transaction.transaction_date.desc())
+        )
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        # Group theo image_url — mỗi hóa đơn 1 dòng
+        seen = set()
+        invoices = []
+        for trans, media in rows:
+            if media.image_url in seen:
+                continue
+            seen.add(media.image_url)
+            invoices.append({
+                "image_url": media.image_url,
+                "transaction_date": trans.transaction_date,
+                "total_amount": float(sum(
+                    t.total_amount for t, m in rows if m.image_url == media.image_url
+                )),
+            })
+
+        return invoices
 async def get_transaction_service(db: AsyncSession = Depends(get_db)):
     return TransactionService(db)

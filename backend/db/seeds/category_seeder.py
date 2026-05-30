@@ -6,6 +6,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from app.config.database import AsyncSessionLocal, engine, Base
 from app.models.category import Category, TransactionType
+from app.models.user import User
+from app.models.transaction import Transaction, TransactionDetail, TransactionMedia
+from app.models.financial import Budget
+from app.models.notification import Notification
+
 from sqlalchemy.future import select
 
 async def init_db():
