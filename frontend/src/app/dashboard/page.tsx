@@ -12,19 +12,6 @@ interface BalanceData {
   expense: number;
 }
 
-interface Category {
-  category_id: number;
-  category_name: string;
-  transaction_type: string;
-  icon: string;
-}
-
-interface Budget {
-  budget_id: number;
-  category_id: number;
-  amount_limit: number;
-}
-
 interface ExpenseCategory {
   id: string;
   name: string;
@@ -59,6 +46,7 @@ const formatCurrency = (amount: number) =>
   }).format(amount);
 
 export default function DashboardPage() {
+  const [isMounted, setIsMounted] = useState(false);
   const [currentMonth, setCurrentMonth] = useState("");
   const [trend, setTrend] = useState(0);
   const [balance, setBalance] = useState<BalanceData>({
@@ -70,6 +58,7 @@ export default function DashboardPage() {
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
 
   useEffect(() => {
+    setIsMounted(true);
     setCurrentMonth(getCurrentMonth());
     fetchDashboard();
   }, []);
@@ -77,52 +66,45 @@ export default function DashboardPage() {
   const fetchDashboard = async () => {
     try {
       const now = new Date();
+      const currentMonthNum = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
 
-      const [remainingRes, categoriesRes, budgetsRes, txRes] =
-        await Promise.all([
-          fetch(
-            `${API_URL}/budgets/remaining?month=${
-              now.getMonth() + 1
-            }&year=${now.getFullYear()}`,
-            { credentials: "include" }
-          ),
-          fetch(`${API_URL}/categories`, { credentials: "include" }),
-          fetch(`${API_URL}/budgets`, { credentials: "include" }),
-          fetch(`${API_URL}/transactions`, { credentials: "include" }),
-        ]);
+      const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthNum = prevDate.getMonth() + 1;
+      const prevYear = prevDate.getFullYear();
 
-      const remainingJson = await remainingRes.json();
-      const categoriesJson = await categoriesRes.json();
-      const budgetsJson = await budgetsRes.json();
-      const txJson = await txRes.json();
+      // Gọi đồng thời 3 API: Tháng hiện tại, Tháng trước (để tính Trend) và Danh sách giao dịch
+      const [currRes, prevRes, txRes] = await Promise.all([
+        fetch(
+          `${API_URL}/budgets/remaining?month=${currentMonthNum}&year=${currentYear}`,
+          { credentials: "include" }
+        ),
+        fetch(
+          `${API_URL}/budgets/remaining?month=${prevMonthNum}&year=${prevYear}`,
+          { credentials: "include" }
+        ),
+        fetch(`${API_URL}/transactions`, { credentials: "include" }),
+      ]);
 
-      const remain = remainingJson?.data || {};
+      const currJson = currRes.ok ? await currRes.json() : {};
+      const prevJson = prevRes.ok ? await prevRes.json() : {};
+      const txJson = txRes.ok ? await txRes.json() : {};
 
+      const curr = currJson.data || currJson || {};
+      const prev = prevJson.data || prevJson || {};
+
+      // 1. GÁN KHOẢN DƯ & TỔNG CHI TIÊU
       setBalance({
-        current: remain.total_remaining || 0,
-        income: remain.inflow_total || 0,
-        expense: remain.outflow_total || 0,
+        current: curr.total_remaining || 0,
+        income: curr.inflow_total || 0,
+        expense: curr.outflow_total || 0,
       });
 
-      // =========================
-      // TREND (FIX LOGIC)
-      // =========================
-      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-      const prevRes = await fetch(
-        `${API_URL}/budgets/remaining?month=${
-          prevMonth.getMonth() + 1
-        }&year=${prevMonth.getFullYear()}`,
-        { credentials: "include" }
-      );
-
-      const prevJson = await prevRes.json();
-
-      const currentExpense = remain.outflow_total || 0;
-      const previousExpense = prevJson?.data?.outflow_total || 0;
+      // 2. TÍNH TREND (%) SO VỚI THÁNG TRƯỚC
+      const currentExpense = curr.outflow_total || 0;
+      const previousExpense = prev.outflow_total || 0;
 
       let percent = 0;
-
       if (previousExpense === 0 && currentExpense > 0) {
         percent = 100;
       } else if (previousExpense > 0) {
@@ -130,68 +112,96 @@ export default function DashboardPage() {
           ((currentExpense - previousExpense) / previousExpense) * 100
         );
       }
-
       setTrend(percent);
 
-      // =========================
-      // CATEGORY MAP
-      // =========================
-      const categoryList: Category[] = Array.isArray(categoriesJson)
-        ? categoriesJson
-        : [];
-
-      const budgetList: Budget[] = Array.isArray(budgetsJson)
-        ? budgetsJson
-        : [];
-
-      const budgetMap = new Map<number, Budget>();
-      budgetList.forEach((b) => budgetMap.set(b.category_id, b));
-
+      // 3. XỬ LÝ PHÂN BỔ CHI TIÊU (CHỈ LẤY CÁC MỤC ĐÃ PHÁT SINH GIAO DỊCH)
+      // B3.1: Gom nhóm số tiền chi tiêu THỰC TẾ từ lịch sử giao dịch (transactions)
       const spentMap = new Map<number, number>();
+      const categoryInfoMap = new Map<number, { name: string; icon: string }>();
 
       const groups = txJson?.data?.data || [];
-
       groups.forEach((group: any) => {
         (group.transactions || []).forEach((tx: any) => {
           if (tx.transaction_type === "outflow") {
-            const prev = spentMap.get(tx.category_id) || 0;
-            spentMap.set(tx.category_id, prev + Number(tx.amount || 0));
+            const catId = tx.category_id;
+            const prevSpent = spentMap.get(catId) || 0;
+            spentMap.set(catId, prevSpent + Number(tx.amount || 0));
+
+            // Lưu kèm tên và icon lỡ như API budgets không có
+            if (!categoryInfoMap.has(catId)) {
+              categoryInfoMap.set(catId, {
+                name: tx.category_name,
+                icon: tx.icon || "category",
+              });
+            }
           }
         });
       });
 
-      const merged: ExpenseCategory[] = [];
+      // B3.2: Lấy thông tin Hạn mức (Limit) từ API remaining
+      const allocations = curr.allocations || [];
+      const limitMap = new Map<number, number>();
 
-      categoryList.forEach((cat) => {
-        if (cat.transaction_type !== "outflow") return;
+      allocations.forEach((alloc: any) => {
+        limitMap.set(alloc.category_id, alloc.amount_limit || 0);
+        // Cập nhật tên/icon chuẩn từ API remaining nếu có
+        categoryInfoMap.set(alloc.category_id, {
+          name: alloc.category_name,
+          icon: alloc.icon || "category",
+        });
+      });
 
-        const spent = spentMap.get(cat.category_id) || 0;
-        const limit = budgetMap.get(cat.category_id)?.amount_limit || 0;
+      // B3.3: Map ra mảng hiển thị, CHỈ LẤY những danh mục có Spent > 0
+      const mappedCategories: ExpenseCategory[] = [];
 
-        if (spent > 0 || limit > 0) {
-          merged.push({
-            id: String(cat.category_id),
-            name: cat.category_name,
+      spentMap.forEach((spent, catId) => {
+        if (spent > 0) {
+          const limit = limitMap.get(catId) || 0;
+          const info = categoryInfoMap.get(catId) || {
+            name: "Khác",
+            icon: "category",
+          };
+
+          // Tự tính phần trăm ở Frontend
+          let calcPercent = 0;
+          if (limit > 0) {
+            calcPercent = Math.round((spent / limit) * 100);
+          } else {
+            // Không có hạn mức nhưng vẫn tiêu -> Thanh process bar đầy 100% (Hoặc bạn có thể để 0 tùy ý)
+            calcPercent = 100;
+          }
+
+          mappedCategories.push({
+            id: String(catId),
+            name: info.name,
             amount: spent,
-            limit,
-            percentage: limit > 0 ? Math.round((spent / limit) * 100) : 0,
-            icon: cat.icon || "category",
+            limit: limit,
+            percentage: calcPercent,
+            icon: info.icon,
           });
         }
       });
 
-      setCategories(merged);
+      // B3.4: Sắp xếp danh mục tiêu nhiều nhất lên đầu
+      mappedCategories.sort((a, b) => b.amount - a.amount);
+
+      setCategories(mappedCategories);
     } catch (error) {
-      console.error(error);
+      console.error("Lỗi lấy dữ liệu Dashboard:", error);
     }
   };
 
   // =========================
-  // TREND UI LOGIC (FIX MÀU)
+  // TREND UI LOGIC
   // =========================
   const isUp = trend > 0;
   const isDown = trend < 0;
-  const isFlat = trend === 0;
+
+  if (!isMounted) {
+    return (
+      <main className="flex-grow w-full max-w-md mx-auto px-5 pt-2 pb-28 min-h-screen bg-[#f9f9fe]"></main>
+    );
+  }
 
   return (
     <main className="flex-grow w-full max-w-md mx-auto px-5 pt-2 pb-28 min-h-screen bg-[#f9f9fe]">
@@ -218,7 +228,7 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {/* TREND FIX */}
+            {/* TREND UI */}
             <div
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${
                 isUp
@@ -241,18 +251,14 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* =========================================
-          BANNER QUẢNG CÁO TÍNH NĂNG OCR (MỚI THÊM) 
-      ========================================= */}
+      {/* BANNER QUẢNG CÁO TÍNH NĂNG OCR */}
       <div className="bg-gradient-to-r from-[#dde1ff]/80 to-[#f3f3f8] p-4 rounded-2xl border border-[#e2e2e7]/60 shadow-sm flex items-center justify-between gap-4 mb-5 relative overflow-hidden group">
-        {/* Icon Trang trí */}
         <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shrink-0 shadow-sm z-10 border border-[#e2e2e7]/30">
           <span className="material-symbols-outlined text-[#4b5b9a] text-2xl group-hover:scale-110 transition-transform">
             document_scanner
           </span>
         </div>
 
-        {/* Nội dung chữ */}
         <div className="flex-grow z-10">
           <h3 className="font-headline font-bold text-sm text-[#1a1c1f]">
             Quét hóa đơn thông minh
@@ -263,7 +269,6 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Nút Call-to-action */}
         <Link
           href="/add"
           className="shrink-0 bg-[#4b5b9a] text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-[#4b5b9a]/20 z-10 outline-none focus:outline-none"
@@ -271,71 +276,90 @@ export default function DashboardPage() {
           Thử ngay
         </Link>
 
-        {/* Watermark mờ ở góc phải background */}
         <div className="absolute -right-4 -bottom-4 opacity-[0.03] pointer-events-none z-0 transform rotate-12">
           <span className="material-symbols-outlined text-8xl">
             receipt_long
           </span>
         </div>
       </div>
-      {/* ========================================= */}
 
-      {/* CATEGORY */}
+      {/* CATEGORY (Phân bổ chi tiêu) */}
       <div className="bg-white p-4 rounded-2xl border border-[#e2e2e7]/60 shadow-sm">
         <h2 className="font-bold text-base mb-3">Phân bổ chi tiêu</h2>
 
-        <div className="grid gap-2">
-          {categories.map((category) => {
-            const isWarning = category.percentage >= 85;
+        {categories.length === 0 ? (
+          <div className="text-center py-6 text-[#767681]">
+            <span className="material-symbols-outlined text-4xl mb-2 text-[#dde1ff]">
+              receipt_long
+            </span>
+            <p className="text-xs font-medium">
+              Chưa có khoản chi tiêu nào trong tháng này.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {categories.map((category) => {
+              const isWarning = category.percentage >= 85;
 
-            return (
-              <Link
-                key={category.id}
-                href={`/analytics/${category.id}?name=${encodeURIComponent(
-                  category.name
-                )}`}
-                className="flex gap-3 p-3 rounded-xl border border-[#e2e2e7]/40"
-              >
-                <div
-                  className={`w-10 h-10 flex items-center justify-center rounded-xl ${
-                    isWarning
-                      ? "bg-[#ffdad6] text-[#ba1a1a]"
-                      : "bg-[#f3f3f8] text-[#4b5b9a]"
-                  }`}
+              return (
+                <Link
+                  key={category.id}
+                  href={`/analytics/${category.id}?name=${encodeURIComponent(
+                    category.name
+                  )}`}
+                  className="flex gap-3 p-3 rounded-xl border border-[#e2e2e7]/40"
                 >
-                  <span className="material-symbols-outlined text-xl">
-                    {category.icon}
-                  </span>
-                </div>
+                  <div
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl ${
+                      isWarning
+                        ? "bg-[#ffdad6] text-[#ba1a1a]"
+                        : "bg-[#f3f3f8] text-[#4b5b9a]"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {category.icon}
+                    </span>
+                  </div>
 
-                <div className="flex-1">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="text-xs font-bold">{category.name}</p>
-                      <p className="text-[9px] text-[#616470]">
-                        {formatCurrency(category.amount)} /{" "}
-                        {formatCurrency(category.limit)}
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="text-xs font-bold">{category.name}</p>
+                        <p className="text-[9px] text-[#616470]">
+                          {formatCurrency(category.amount)} /{" "}
+                          {category.limit > 0
+                            ? formatCurrency(category.limit)
+                            : "Không giới hạn"}
+                        </p>
+                      </div>
+
+                      <p
+                        className={`text-xs font-bold ${
+                          isWarning ? "text-[#ba1a1a]" : "text-[#4b5b9a]"
+                        }`}
+                      >
+                        {category.percentage}%
                       </p>
                     </div>
 
-                    <p className="text-xs font-bold text-[#4b5b9a]">
-                      {category.percentage}%
-                    </p>
+                    <div className="h-1.5 bg-[#e2e2e7] rounded-full mt-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isWarning
+                            ? "bg-[#ba1a1a]"
+                            : "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8]"
+                        }`}
+                        style={{
+                          width: `${Math.min(category.percentage, 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
-
-                  <div className="h-1.5 bg-[#e2e2e7] rounded-full mt-2">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8]"
-                      style={{
-                        width: `${Math.min(category.percentage, 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </main>
   );
