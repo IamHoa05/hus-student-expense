@@ -19,6 +19,8 @@ const getInitials = (name: string) => {
 export default function TopBar() {
   const [userName, setUserName] = useState("...");
   const [notiCount, setNotiCount] = useState(0);
+  // 1. THÊM STATE QUẢN LÝ ẢNH ĐẠI DIỆN
+  const [avtUrl, setAvtUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchNotiCount = async () => {
@@ -49,6 +51,13 @@ export default function TopBar() {
           // lấy full name luôn
           const fullName = data.full_name || data.name || "Người dùng";
           setUserName(fullName);
+
+          // 2. LẤY LINK ẢNH VÀ BỎ QUA CHỮ "string" MẶC ĐỊNH
+          if (data.avt_url && data.avt_url !== "string") {
+            setAvtUrl(data.avt_url);
+          } else {
+            setAvtUrl(null);
+          }
         } else {
           setUserName("Khách");
         }
@@ -64,15 +73,24 @@ export default function TopBar() {
 
   return (
     <nav className="w-full sticky top-0 z-40 bg-[#f9f9fe]/90 backdrop-blur-md flex justify-between items-center py-4 mb-2">
-      {/* 1. GẮN LINK SANG TRANG PROFILE TẠI ĐÂY */}
+      {/* GẮN LINK SANG TRANG PROFILE TẠI ĐÂY */}
       <Link
         href="/profile"
         className="flex items-center gap-3 group active:scale-95 transition-all outline-none"
       >
         <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] group-hover:scale-105 transition-transform shadow-sm">
-          <span className="text-sm font-black font-headline text-[#4b5b9a]">
-            {getInitials(userName)}
-          </span>
+          {/* 3. HIỂN THỊ ẢNH HOẶC CHỮ CÁI ĐẦU */}
+          {avtUrl ? (
+            <img
+              src={avtUrl}
+              alt="Avatar"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-sm font-black font-headline text-[#4b5b9a]">
+              {getInitials(userName)}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col">
@@ -82,7 +100,7 @@ export default function TopBar() {
         </div>
       </Link>
 
-      {/* 2. CHUÔNG THÔNG BÁO CHUYỂN SANG TRANG NOTIFICATIONS */}
+      {/* CHUÔNG THÔNG BÁO CHUYỂN SANG TRANG NOTIFICATIONS */}
       <Link
         href="/notifications"
         className="relative text-[#94A3E8] hover:text-[#4b5b9a] transition-colors p-2 active:scale-95 duration-200 outline-none"

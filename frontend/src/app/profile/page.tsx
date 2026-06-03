@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -23,8 +23,9 @@ type Category = {
 export default function ProfilePage() {
   const router = useRouter();
 
-  // Chặn lỗi Hydration (Lệch giao diện Server/Client)
+  // Chặn lỗi Hydration
   const [isMounted, setIsMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // States thông tin người dùng
   const [profile, setProfile] = useState({
@@ -33,6 +34,7 @@ export default function ProfilePage() {
     number: "",
   });
   const [editName, setEditName] = useState("");
+  const [avtUrl, setAvtUrl] = useState<string | null>(null);
 
   // States quản lý hạng mục và hạn mức
   const [categories, setCategories] = useState<Category[]>([]);
@@ -44,6 +46,7 @@ export default function ProfilePage() {
   // States quản lý trạng thái loading riêng biệt
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingBudgets, setIsSavingBudgets] = useState(false);
+  const [isUploadingAvt, setIsUploadingAvt] = useState(false);
 
   // Quản lý thông báo Popup (Toast)
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({
@@ -65,7 +68,9 @@ export default function ProfilePage() {
     fetchBudgets();
   }, []);
 
+  // ==========================================================
   // 1. LẤY THÔNG TIN NGƯỜI DÙNG
+  // ==========================================================
   const fetchUser = async () => {
     try {
       const response = await fetch(`${API_URL}/auth/me`, {
@@ -80,12 +85,74 @@ export default function ProfilePage() {
         number: data.phone || data.number || "",
       });
       setEditName(data.full_name || "");
+
+      // Xử lý ảnh đại diện (Bỏ qua nếu backend trả chữ "string" mặc định)
+      if (data.avt_url && data.avt_url !== "string") {
+        setAvtUrl(data.avt_url);
+      } else {
+        setAvtUrl(null);
+      }
     } catch (err) {
       console.error("Lỗi khi tải thông tin user:", err);
     }
   };
 
-  // 2. LẤY DANH SÁCH HẠNG MỤC CHI TIÊU
+  // ==========================================================
+  // 2. TẢI ẢNH ĐẠI DIỆN LÊN (POST /avatars/me)
+  // ==========================================================
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Dùng FormData để gửi file ảnh
+    const formData = new FormData();
+    formData.append("file", file); // Trường dữ liệu thường là 'file'
+
+    setIsUploadingAvt(true);
+    try {
+      const res = await fetch(`${API_URL}/avatars/me`, {
+        method: "POST",
+        credentials: "include",
+        body: formData, // Không set Content-Type để trình duyệt tự nhận multipart/form-data
+      });
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      setAvtUrl(data.avt_url);
+      triggerToast("✅ Đã cập nhật ảnh đại diện!");
+    } catch (err) {
+      triggerToast("❌ Lỗi tải ảnh lên!");
+    } finally {
+      setIsUploadingAvt(false);
+      // Xóa value để có thể chọn lại cùng 1 file nếu cần
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // ==========================================================
+  // 3. XÓA ẢNH ĐẠI DIỆN (DELETE /avatars/me)
+  // ==========================================================
+  const handleDeleteAvatar = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Ngăn click nhầm vào nút upload bên dưới
+    try {
+      const res = await fetch(`${API_URL}/avatars/me`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error();
+
+      setAvtUrl(null);
+      triggerToast("✅ Đã xóa ảnh đại diện!");
+    } catch (err) {
+      triggerToast("❌ Lỗi khi xóa ảnh!");
+    }
+  };
+
+  // ==========================================================
+  // CÁC HÀM GET HẠN MỨC & DANH MỤC
+  // ==========================================================
   const fetchCategories = async () => {
     try {
       const response = await fetch(`${API_URL}/categories`, {
@@ -93,7 +160,6 @@ export default function ProfilePage() {
       });
       if (!response.ok) return;
       const data = await response.json();
-
       const outflowCategories = Array.isArray(data)
         ? data.filter((cat: any) => cat.transaction_type === "outflow")
         : [];
@@ -103,7 +169,6 @@ export default function ProfilePage() {
     }
   };
 
-  // 3. LẤY HẠN MỨC HIỆN TẠI (Dùng API remaining theo tháng để đảm bảo chuẩn xác 100%)
   const fetchBudgets = async () => {
     try {
       const now = new Date();
@@ -112,32 +177,26 @@ export default function ProfilePage() {
 
       const response = await fetch(
         `${API_URL}/budgets/remaining?month=${m}&year=${y}`,
-        {
-          credentials: "include",
-        }
+        { credentials: "include" }
       );
 
       if (!response.ok) return;
       const data = await response.json();
-
       const amountMap: Record<number, number> = {};
-
-      // Lấy mảng allocations từ API remaining (hỗ trợ cả trường hợp bọc trong data)
       const allocations = data.allocations || data.data?.allocations || [];
 
       allocations.forEach((item: any) => {
-        // Gán đúng amount_limit vào map theo category_id
         amountMap[item.category_id] = item.amount_limit || 0;
       });
-
-      // Điền số tiền lên giao diện
       setBudgets(amountMap);
     } catch (err) {
       console.error("Lỗi khi tải hạn mức:", err);
     }
   };
 
-  // 4. CHỈ LƯU THÔNG TIN CÁ NHÂN (TÊN)
+  // ==========================================================
+  // LƯU TÊN (Dùng PATCH để cập nhật một phần)
+  // ==========================================================
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
       triggerToast("⚠️ Tên không được để trống!");
@@ -147,27 +206,32 @@ export default function ProfilePage() {
     setIsSavingProfile(true);
     try {
       const res = await fetch(`${API_URL}/auth/me`, {
-        method: "PUT",
+        method: "PATCH", // <--- ĐỔI TỪ PUT THÀNH PATCH Ở ĐÂY
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           full_name: editName.trim(),
-          avt_url: "string",
         }),
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        // Nếu vẫn lỗi, thử bắt lỗi xem Backend báo gì để dễ sửa
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Chi tiết lỗi từ Backend:", errorData);
+        throw new Error();
+      }
 
       setProfile((prev) => ({ ...prev, name: editName.trim() }));
       triggerToast("✅ Đã cập nhật họ và tên!");
     } catch (err) {
-      triggerToast("❌ Lỗi cập nhật thông tin cá nhân!");
+      triggerToast("❌ Không thể cập nhật tên!");
     } finally {
       setIsSavingProfile(false);
     }
   };
-
-  // 5. CHỈ LƯU THIẾT LẬP HẠN MỨC NGÂN SÁCH
+  // ==========================================================
+  // LƯU HẠN MỨC
+  // ==========================================================
   const handleSaveBudgets = async () => {
     const totalChanges = Object.keys(changedBudgets).length;
     if (totalChanges === 0) {
@@ -185,11 +249,9 @@ export default function ProfilePage() {
       };
       const todayStr = formatDate(now);
 
-      // Chỉ gửi lên API những hạn mức có sự thay đổi thực tế
       const budgetPromises = Object.entries(changedBudgets).map(
         async ([catIdStr, amountLimit]) => {
           const catId = Number(catIdStr);
-
           return fetch(`${API_URL}/budgets`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -208,8 +270,8 @@ export default function ProfilePage() {
 
       await Promise.all(budgetPromises);
 
-      setChangedBudgets({}); // Reset mảng tạm
-      await fetchBudgets(); // Tải lại dữ liệu từ Server để đồng bộ giao diện cứng
+      setChangedBudgets({});
+      await fetchBudgets();
       triggerToast("✅ Đã lưu tất cả hạn mức mới!");
     } catch (err) {
       triggerToast("❌ Không thể lưu hạn mức ngân sách!");
@@ -226,7 +288,6 @@ export default function ProfilePage() {
 
   return (
     <main className="w-full max-w-md mx-auto min-h-screen bg-[#f9f9fe] pb-32 relative">
-      {/* Thông báo popup */}
       {toast.show && (
         <div className="fixed bottom-28 left-5 right-5 z-[100] flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-300">
           <div className="bg-[#1a1c1f] text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-xs max-w-[90%] text-center">
@@ -235,7 +296,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Header */}
       <header className="sticky top-0 bg-[#f9f9fe]/90 backdrop-blur-md border-b border-[#e2e2e7]/30 flex items-center px-5 py-4 z-40">
         <button
           onClick={() => router.back()}
@@ -249,14 +309,62 @@ export default function ProfilePage() {
       </header>
 
       <div className="px-5 pt-6 space-y-6">
-        {/* KHỐI 1: THÔNG TIN CÁ NHÂN */}
+        {/* KHỐI 1: THÔNG TIN CÁ NHÂN & ẢNH ĐẠI DIỆN */}
         <section className="bg-white p-5 rounded-2xl border border-[#e2e2e7]/50 shadow-sm space-y-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] shadow-sm shrink-0">
-              <span className="text-xl font-black font-headline text-[#4b5b9a]">
-                {getInitials(editName)}
-              </span>
+            {/* AVATAR CLICK ĐỂ UPLOAD */}
+            <div className="relative group shrink-0">
+              <div
+                className="w-16 h-16 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] shadow-sm cursor-pointer transition-transform active:scale-95"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isUploadingAvt ? (
+                  <span className="material-symbols-outlined text-2xl text-[#4b5b9a] animate-spin">
+                    autorenew
+                  </span>
+                ) : avtUrl ? (
+                  <img
+                    src={avtUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xl font-black font-headline text-[#4b5b9a]">
+                    {getInitials(editName)}
+                  </span>
+                )}
+
+                {/* Lớp mờ báo hiệu có thể click sửa khi hover */}
+                <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center transition-all">
+                  <span className="material-symbols-outlined text-white text-lg drop-shadow-md">
+                    edit
+                  </span>
+                </div>
+              </div>
+
+              {/* NÚT XÓA ẢNH (Chỉ hiện khi có ảnh) */}
+              {avtUrl && !isUploadingAvt && (
+                <button
+                  onClick={handleDeleteAvatar}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-white border border-[#e2e2e7] text-[#ba1a1a] rounded-full flex items-center justify-center shadow-sm hover:bg-[#ffdad6] active:scale-90 transition-all outline-none"
+                  title="Xóa ảnh đại diện"
+                >
+                  <span className="material-symbols-outlined text-[12px]">
+                    close
+                  </span>
+                </button>
+              )}
+
+              {/* Input file ẩn */}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleUploadAvatar}
+              />
             </div>
+
             <div className="min-w-0">
               <h4 className="font-bold text-sm text-[#1a1c1f] truncate">
                 {profile.name || "Người dùng"}
@@ -304,7 +412,6 @@ export default function ProfilePage() {
             <h4 className="font-headline font-bold text-lg text-[#1a1c1f]">
               Thiết lập hạn mức
             </h4>
-            {/* Hiện số lượng ô đã sửa để người dùng biết */}
             {Object.keys(changedBudgets).length > 0 && (
               <span className="text-[10px] font-bold bg-[#ffdad6] text-[#ba1a1a] px-2 py-0.5 rounded-full animate-pulse">
                 Đang sửa {Object.keys(changedBudgets).length} mục
@@ -343,14 +450,10 @@ export default function ProfilePage() {
                     onChange={(e) => {
                       const val =
                         parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
-
-                      // Cập nhật giao diện lập tức
                       setBudgets((prev) => ({
                         ...prev,
                         [cat.category_id]: val,
                       }));
-
-                      // Đánh dấu để nút Lưu hạn mức hoạt động
                       setChangedBudgets((prev) => ({
                         ...prev,
                         [cat.category_id]: val,
@@ -366,7 +469,6 @@ export default function ProfilePage() {
             ))}
           </div>
 
-          {/* NÚT LƯU HẠN MỨC RIÊNG BIỆT */}
           <button
             onClick={handleSaveBudgets}
             disabled={

@@ -22,6 +22,7 @@ export default function BottomNavigation() {
     "/forgot-password",
     "/verify",
     "/room/create",
+    "/transactions/export",
   ];
 
   // Ẩn nếu URL nằm trong danh sách trên, HOẶC là trang chi tiết phân tích (ví dụ: /analytics/cat_food)

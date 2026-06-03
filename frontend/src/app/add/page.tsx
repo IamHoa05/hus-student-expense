@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,15 +25,21 @@ const CATEGORIES = [
 ];
 
 interface ProductItem {
-  id: number;
+  id: number | string;
   name: string;
   qty: number;
   price: number;
+  category_id?: number;
 }
 
-// Class Tailwind dùng để ẩn mũi tên tăng giảm số ở input type="number"
 const hideNumberSpinners =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
+// Hàm hỗ trợ loại bỏ dấu chấm/phẩy trong chuỗi tiền tệ (VD: "54.900" -> 54900)
+const parseCurrencyString = (str: string | number) => {
+  if (!str) return 0;
+  return parseInt(String(str).replace(/\D/g, ""), 10) || 0;
+};
 
 export default function AddTransactionPage() {
   const router = useRouter();
@@ -51,31 +56,27 @@ export default function AddTransactionPage() {
   const [date, setDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [note, setNote] = useState<string>("");
+  const [note, setNote] = useState<string>(""); // Sẽ được dùng làm Tên cửa hàng khi quét OCR
 
-  // State cho hạng mục tạo mới bằng tay (Chỉ dùng bên Chi tiêu)
   const [customCategory, setCustomCategory] = useState("");
 
-  // States API Hạng mục
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   const [incomeCategories, setIncomeCategories] = useState<any[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
-  // States cho danh sách sản phẩm
   const [products, setProducts] = useState<ProductItem[]>([
     { id: Date.now(), name: "", qty: 1, price: 0 },
   ]);
 
-  // States & Refs cho OCR
   const [isScanning, setIsScanning] = useState(false);
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [hasUploadedImage, setHasUploadedImage] = useState(false);
+  const [rawOcrData, setRawOcrData] = useState<any>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // =======================================================================
-  // FETCH CATEGORIES TỪ API
+  // FETCH CATEGORIES
   // =======================================================================
   useEffect(() => {
     const fetchCategories = async () => {
@@ -104,30 +105,29 @@ export default function AddTransactionPage() {
           };
         };
 
-        const finalOut = Array.isArray(outData)
-          ? outData
-              .map(mapIcon)
-              .filter((cat) => cat.name.toLowerCase() !== "string")
-          : [];
-        const finalIn = Array.isArray(inData)
-          ? inData
-              .map(mapIcon)
-              .filter((cat) => cat.name.toLowerCase() !== "string")
-          : [];
-
-        setExpenseCategories(finalOut);
-        setIncomeCategories(finalIn);
+        setExpenseCategories(
+          Array.isArray(outData)
+            ? outData
+                .map(mapIcon)
+                .filter((cat) => cat.name.toLowerCase() !== "string")
+            : []
+        );
+        setIncomeCategories(
+          Array.isArray(inData)
+            ? inData
+                .map(mapIcon)
+                .filter((cat) => cat.name.toLowerCase() !== "string")
+            : []
+        );
       } catch (error) {
         console.error("Lỗi lấy categories:", error);
       } finally {
         setLoadingCategories(false);
       }
     };
-
     fetchCategories();
   }, []);
 
-  // Tự động chọn mục đầu tiên khi chuyển tab hoặc tải xong data (nếu ô custom đang trống)
   useEffect(() => {
     if (customCategory.trim() === "") {
       if (transactionType === "expense" && expenseCategories.length > 0) {
@@ -139,7 +139,7 @@ export default function AddTransactionPage() {
   }, [transactionType, expenseCategories, incomeCategories, customCategory]);
 
   // =======================================================================
-  // LOGIC SẢN PHẨM & OCR
+  // LOGIC SẢN PHẨM & TỔNG TIỀN
   // =======================================================================
   const totalAmount = useMemo(() => {
     return products.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -162,41 +162,122 @@ export default function AddTransactionPage() {
     setProducts([...products, { id: Date.now(), name: "", qty: 1, price: 0 }]);
   };
 
-  const updateProduct = (id: number, field: keyof ProductItem, value: any) => {
+  const updateProduct = (
+    id: number | string,
+    field: keyof ProductItem,
+    value: any
+  ) => {
     setProducts(
       products.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
   };
 
-  const removeProduct = (id: number) => {
+  const removeProduct = (id: number | string) => {
     setProducts(products.filter((p) => p.id !== id));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // =======================================================================
+  // XỬ LÝ ẢNH OCR
+  // =======================================================================
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setIsScanning(true);
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setOcrPreview(ev.target?.result as string);
-        setHasUploadedImage(true);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
 
-      scanTimeoutRef.current = setTimeout(() => {
-        setIsScanning(false);
-        setIsManualMode(false);
+    setIsScanning(true);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setOcrPreview(ev.target?.result as string);
+      setHasUploadedImage(true);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      // BƯỚC 1: TRÍCH XUẤT ẢNH
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const extractRes = await fetch(`${API_URL}/transactions/ocr/extract`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!extractRes.ok) throw new Error("Lỗi khi trích xuất văn bản OCR");
+      const extData = await extractRes.json();
+
+      // BƯỚC 2: PHÂN LOẠI (Có thể gộp chung vào 1 luồng nếu Backend tự động bóc tách)
+      const classifyRes = await fetch(`${API_URL}/transactions/ocr/classify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(extData),
+      });
+
+      let finalData = extData;
+      if (classifyRes.ok) {
+        finalData = await classifyRes.json();
+      }
+
+      setRawOcrData(finalData);
+
+      // --- MAPPING DỮ LIỆU LÊN UI ---
+      if (finalData.ten_cua_hang) setNote(finalData.ten_cua_hang);
+
+      // Chuyển ngày dạng DD/MM/YYYY sang YYYY-MM-DD
+      if (finalData.ngay_mua) {
+        const parts = finalData.ngay_mua.split("/");
+        if (parts.length === 3) {
+          setDate(
+            `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(
+              2,
+              "0"
+            )}`
+          );
+        }
+      }
+
+      // Xử lý danh sách sản phẩm
+      const itemsList =
+        finalData.danh_sach_san_pham || finalData.transactions_preview || [];
+      if (itemsList.length > 0) {
+        const mappedProducts = itemsList.map((item: any, idx: number) => {
+          const catStr = item.phan_loai || "";
+          // Tìm Category ID tương ứng bằng cách so sánh chuỗi
+          const matchedCat = expenseCategories.find(
+            (c) => c.name.toLowerCase() === catStr.toLowerCase()
+          );
+
+          return {
+            id: Date.now() + idx,
+            name: item.ten_san_pham || item.note || "Sản phẩm",
+            qty: parseCurrencyString(item.so_luong) || 1,
+            price: parseCurrencyString(item.don_gia || item.amount || 0),
+            category_id: matchedCat?.category_id || undefined,
+          };
+        });
+        setProducts(mappedProducts);
+      } else {
+        // Fallback nếu không bóc tách được từng món
+        const totalNum = parseCurrencyString(finalData.tong_tien_hoa_don);
         setProducts([
-          { id: 1, name: "Sữa tươi Vinamilk", qty: 2, price: 15000 },
-          { id: 2, name: "Bánh mì gối", qty: 1, price: 25000 },
+          { id: Date.now(), name: "Tổng hóa đơn", qty: 1, price: totalNum },
         ]);
-        alert("Đã quét hóa đơn thành công!");
-      }, 2500);
+      }
+
+      setIsManualMode(false);
+      alert("✅ Quét và phân tích hóa đơn thành công!");
+    } catch (err) {
+      console.error("Lỗi quy trình OCR:", err);
+      alert("❌ Có lỗi xảy ra khi xử lý hóa đơn, vui lòng kiểm tra lại ảnh.");
+      handleRemoveImage();
+    } finally {
+      setIsScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   const handleRemoveImage = () => {
-    if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     setIsScanning(false);
     setOcrPreview(null);
     setHasUploadedImage(false);
@@ -204,11 +285,12 @@ export default function AddTransactionPage() {
     setProducts([
       { id: Date.now(), name: note || "Giao dịch thủ công", qty: 1, price: 0 },
     ]);
+    setRawOcrData(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // =======================================================================
-  // LƯU GIAO DỊCH (POST) & TẠO HẠNG MỤC NẾU CẦN
+  // BƯỚC 3: XÁC NHẬN LƯU HÓA ĐƠN
   // =======================================================================
   const handleSave = async () => {
     if (totalAmount <= 0) return alert("Vui lòng nhập số tiền!");
@@ -216,7 +298,6 @@ export default function AddTransactionPage() {
     let finalCategoryId = parseInt(selectedCategory);
     const isIncome = transactionType === "income";
 
-    // NẾU NGƯỜI DÙNG TẠO HẠNG MỤC MỚI BÊN CHI TIÊU -> Gọi API tạo trước
     if (!isIncome && customCategory.trim() !== "") {
       try {
         const catRes = await fetch(`${API_URL}/categories`, {
@@ -224,75 +305,103 @@ export default function AddTransactionPage() {
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            name: customCategory.trim(), // Sửa thành name cho khớp Backend
+            name: customCategory.trim(),
             transaction_type: "outflow",
-            icon: "category", // Icon mặc định cho danh mục tự tạo
+            icon: "category",
           }),
         });
 
-        if (!catRes.ok) {
-          const err = await catRes.json();
-          return alert(
-            `❌ Lỗi tạo hạng mục mới: ${err.detail || JSON.stringify(err)}`
-          );
-        }
-
+        if (!catRes.ok) throw new Error("Lỗi tạo danh mục");
         const newCat = await catRes.json();
         finalCategoryId = newCat.category_id;
       } catch (error) {
         console.error("Lỗi tạo hạng mục:", error);
         return alert("❌ Lỗi kết nối khi tạo hạng mục mới!");
       }
-    } else if (!selectedCategory) {
-      return alert("Vui lòng chọn hạng mục cho giao dịch này.");
     }
 
-    // TẠO GIAO DỊCH
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
       .getMinutes()
       .toString()
       .padStart(2, "0")}:00`;
 
-    const payload = {
-      amount: totalAmount,
-      category_id: finalCategoryId,
-      note: note || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
-      transaction_date: `${date}T${currentTime}`,
-      transaction_type: isIncome ? "inflow" : "outflow",
-    };
-
     try {
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
+      if (hasUploadedImage && rawOcrData && !isIncome) {
+        // Gửi Confirm OCR
+        const payloadOCR = {
+          image_url: rawOcrData.image_url || "",
+          ten_cua_hang: note || rawOcrData.ten_cua_hang || "Cửa hàng",
+          ngay_mua: date,
+          tong_tien_hoa_don: String(totalAmount),
+          payment_method: "Cash",
+          location: "Vietnam",
+          danh_sach_san_pham: rawOcrData.danh_sach_san_pham || [],
+          // Map danh sách mặt hàng người dùng vừa chỉnh sửa trên giao diện
+          transactions: products.map((p) => ({
+            amount: p.price * p.qty,
+            category_id:
+              p.category_id ||
+              finalCategoryId ||
+              expenseCategories[0]?.category_id ||
+              1,
+            note: p.name || "Sản phẩm OCR",
+          })),
+        };
 
-      const result = await response.json();
+        const response = await fetch(`${API_URL}/transactions/ocr/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payloadOCR),
+        });
 
-      if (response.ok) {
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || "Có lỗi khi xác nhận hóa đơn");
+        }
+
+        alert("✅ Đã lưu hóa đơn thành công!");
+        router.push("/transactions?tab=scanned&refresh=" + Date.now());
+      } else {
+        // Lưu giao dịch thủ công
+        let finalNote = note;
+        if (!isManualMode && products.length > 0) {
+          const itemsStr = products
+            .map((p) => `${p.name} (x${p.qty})`)
+            .join(", ");
+          finalNote = note ? `${note} - ${itemsStr}` : itemsStr;
+        }
+
+        const payload = {
+          amount: totalAmount,
+          category_id: finalCategoryId,
+          note: finalNote || (isIncome ? "Khoản thu mới" : "Khoản chi mới"),
+          transaction_date: `${date}T${currentTime}`,
+          transaction_type: isIncome ? "inflow" : "outflow",
+        };
+
+        const response = await fetch(`${API_URL}/transactions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) throw new Error("Lỗi khi lưu giao dịch");
+
         alert(`✅ Đã lưu ${isIncome ? "khoản thu" : "khoản chi"} thành công!`);
         router.push("/dashboard");
-      } else {
-        const errorMsg = result.detail || "Có lỗi xảy ra khi lưu.";
-        alert(
-          `❌ Lỗi từ Server: ${
-            typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg)
-          }`
-        );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Lỗi fetch:", error);
-      alert("❌ Lỗi kết nối đến Server!");
+      alert(`❌ ${error.message || "Lỗi kết nối đến Server!"}`);
     }
   };
 
   return (
     <main className="flex-grow w-full max-w-md mx-auto pb-32 relative min-h-screen bg-[#f9f9fe]">
       <div className="px-5 pt-4 space-y-5">
-        {/* Header */}
         <header className="flex items-center gap-3 py-1">
           <button
             onClick={() => router.back()}
@@ -307,12 +416,11 @@ export default function AddTransactionPage() {
           </h1>
         </header>
 
-        {/* Toggle Thu/Chi */}
         <section className="flex p-1 bg-[#ededf2] rounded-full w-full shadow-inner">
           <button
             onClick={() => {
               setTransactionType("expense");
-              setCustomCategory(""); // Reset category input
+              setCustomCategory("");
             }}
             className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "expense"
@@ -325,7 +433,7 @@ export default function AddTransactionPage() {
           <button
             onClick={() => {
               setTransactionType("income");
-              setCustomCategory(""); // Reset category input
+              setCustomCategory("");
             }}
             className={`flex-1 py-2.5 text-xs font-bold rounded-full transition-all outline-none ${
               transactionType === "income"
@@ -337,10 +445,8 @@ export default function AddTransactionPage() {
           </button>
         </section>
 
-        {/* --- GIAO DIỆN KHOẢN CHI --- */}
         {transactionType === "expense" && (
           <>
-            {/* 1. OCR */}
             <section className="relative">
               <div
                 className={`bg-white rounded-2xl border-2 border-dashed border-[#4b5b9a]/20 flex flex-col items-center justify-center text-center transition-all overflow-hidden ${
@@ -349,11 +455,11 @@ export default function AddTransactionPage() {
               >
                 {hasUploadedImage && ocrPreview ? (
                   <div className="relative w-full aspect-[4/3]">
-                    <Image
+                    {/* Dùng img chuẩn thay cho Next Image */}
+                    <img
                       src={ocrPreview}
                       alt="Hóa đơn"
-                      fill
-                      className="object-cover"
+                      className="w-full h-full object-cover"
                     />
                     <button
                       onClick={handleRemoveImage}
@@ -366,7 +472,7 @@ export default function AddTransactionPage() {
                     {!isScanning && (
                       <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full z-20">
                         <p className="text-white text-[10px] font-bold">
-                          Đã quét hóa đơn
+                          Đã phân tích hóa đơn
                         </p>
                       </div>
                     )}
@@ -375,14 +481,14 @@ export default function AddTransactionPage() {
                   <>
                     <div className="w-14 h-14 rounded-full bg-[#dde1ff] flex items-center justify-center mb-3">
                       <span className="material-symbols-outlined text-[#4b5b9a] text-2xl">
-                        photo_camera
+                        document_scanner
                       </span>
                     </div>
                     <h3 className="font-headline font-bold text-sm text-[#1a1c1f] mb-1">
-                      Quét hóa đơn
+                      Quét hóa đơn thông minh
                     </h3>
                     <p className="text-[9px] text-[#767681]">
-                      Chạm để chọn ảnh từ thư viện
+                      Chạm để tải ảnh hóa đơn của bạn lên
                     </p>
                   </>
                 )}
@@ -403,18 +509,17 @@ export default function AddTransactionPage() {
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 border-4 border-[#4b5b9a] border-t-transparent rounded-full animate-spin"></div>
                     <p className="text-xs font-bold text-[#4b5b9a]">
-                      Đang xử lý ảnh...
+                      AI đang xử lý ảnh...
                     </p>
                   </div>
                 </div>
               )}
             </section>
 
-            {/* 2. Chi tiết sản phẩm & Nhập tổng tiền */}
             <section className="bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50 space-y-4">
               <div className="flex justify-between items-end px-1 border-b border-[#e2e2e7] pb-3">
                 <h2 className="font-headline font-bold text-[#1a1c1f]">
-                  {isManualMode ? "Số tiền chi tiêu" : "Danh sách sản phẩm"}
+                  {isManualMode ? "Số tiền chi tiêu" : "Chi tiết đơn hàng"}
                 </h2>
                 {!isManualMode && (
                   <div className="text-right">
@@ -429,7 +534,6 @@ export default function AddTransactionPage() {
               </div>
 
               {isManualMode ? (
-                /* GIAO DIỆN NHẬP NHANH SỐ TIỀN TỔNG */
                 <div className="py-2 space-y-4 px-1">
                   <div className="relative flex items-center border-b border-[#e2e2e7] pb-2 focus-within:border-[#4b5b9a] transition-all">
                     <span className="text-3xl font-black text-[#4b5b9a] mr-3 underline decoration-2 underline-offset-4">
@@ -444,7 +548,7 @@ export default function AddTransactionPage() {
                   </div>
                   <div className="flex justify-between items-start">
                     <p className="text-[11px] text-[#767681] italic font-medium leading-relaxed">
-                      * Nhập nhanh số tiền bạn đã chi mà không cần hóa đơn
+                      * Nhập nhanh số tiền bạn đã chi
                     </p>
                     <button
                       onClick={() => setIsManualMode(false)}
@@ -455,8 +559,7 @@ export default function AddTransactionPage() {
                   </div>
                 </div>
               ) : (
-                /* GIAO DIỆN DANH SÁCH CHI TIẾT */
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   <div className="flex justify-end">
                     <button
                       onClick={() => setIsManualMode(true)}
@@ -468,9 +571,9 @@ export default function AddTransactionPage() {
                   {products.map((p) => (
                     <div
                       key={p.id}
-                      className="p-3 bg-[#f3f3f8] rounded-xl space-y-2.5"
+                      className="p-3 bg-[#f9f9fe] rounded-xl space-y-3 shadow-sm border border-[#e2e2e7]"
                     >
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 border-b border-[#e2e2e7] pb-2">
                         <input
                           type="text"
                           placeholder="Tên sản phẩm..."
@@ -482,15 +585,37 @@ export default function AddTransactionPage() {
                         />
                         <button
                           onClick={() => removeProduct(p.id)}
-                          className="material-symbols-outlined text-[#767681] text-base outline-none"
+                          className="material-symbols-outlined text-[#767681] text-base outline-none hover:text-[#ba1a1a]"
                         >
                           close
                         </button>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2 bg-white px-2 py-0.5 rounded-lg border border-[#e2e2e7]">
-                          <span className="text-[9px] font-bold text-[#767681]">
-                            SL:
+
+                      {/* Đơn giá x Số lượng = Thành tiền */}
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex flex-col gap-1 w-[35%]">
+                          <span className="text-[9px] font-bold text-[#767681] uppercase tracking-wider">
+                            Đơn giá
+                          </span>
+                          <input
+                            type="number"
+                            value={p.price || ""}
+                            onChange={(e) =>
+                              updateProduct(
+                                p.id,
+                                "price",
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            className={`w-full bg-white border border-[#e2e2e7] px-2 py-1.5 rounded-lg text-xs font-black text-[#1a1c1f] focus:outline-none ${hideNumberSpinners}`}
+                          />
+                        </div>
+                        <span className="text-[#c6c5d1] text-xs font-bold mt-3">
+                          x
+                        </span>
+                        <div className="flex flex-col gap-1 w-[20%] text-center">
+                          <span className="text-[9px] font-bold text-[#767681] uppercase tracking-wider">
+                            SL
                           </span>
                           <input
                             type="number"
@@ -502,43 +627,62 @@ export default function AddTransactionPage() {
                                 parseInt(e.target.value) || 1
                               )
                             }
-                            className={`w-8 bg-transparent border-none p-0 text-center text-xs font-black focus:outline-none ${hideNumberSpinners}`}
+                            className={`w-full text-center bg-white border border-[#e2e2e7] px-2 py-1.5 rounded-lg text-xs font-black text-[#1a1c1f] focus:outline-none ${hideNumberSpinners}`}
                           />
                         </div>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={p.price || ""}
-                            onChange={(e) =>
-                              updateProduct(
-                                p.id,
-                                "price",
-                                parseInt(e.target.value) || 0
-                              )
-                            }
-                            className={`w-20 text-right bg-transparent border-none p-0 text-xs font-black text-[#4b5b9a] focus:outline-none ${hideNumberSpinners}`}
-                          />
-                          <span className="text-[9px] font-bold text-[#4b5b9a]">
+                        <span className="text-[#c6c5d1] text-xs font-bold mt-3">
+                          =
+                        </span>
+                        <div className="flex flex-col gap-1 w-[35%] text-right">
+                          <span className="text-[9px] font-bold text-[#767681] uppercase tracking-wider">
+                            Thành tiền
+                          </span>
+                          <span className="text-sm font-black text-[#4b5b9a] pt-1">
+                            {new Intl.NumberFormat("vi-VN").format(
+                              p.price * p.qty
+                            )}
                             đ
                           </span>
                         </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 mt-2 border-t border-[#e2e2e7]">
+                        <span className="text-[9px] font-bold text-[#767681]">
+                          Hạng mục phân loại:
+                        </span>
+                        <select
+                          value={p.category_id || ""}
+                          onChange={(e) =>
+                            updateProduct(
+                              p.id,
+                              "category_id",
+                              parseInt(e.target.value) || undefined
+                            )
+                          }
+                          className="text-[10px] font-black text-[#4b5b9a] bg-[#dde1ff] px-2 py-1 rounded-lg border-none focus:outline-none max-w-[130px] truncate"
+                        >
+                          <option value="">-- Mặc định --</option>
+                          {expenseCategories.map((c) => (
+                            <option key={c.category_id} value={c.category_id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   ))}
                   <button
                     onClick={addProduct}
-                    className="w-full py-2.5 border-2 border-dashed border-[#c6c5d1] rounded-xl text-[9px] font-bold uppercase text-[#767681] hover:border-[#4b5b9a] hover:text-[#4b5b9a] transition-colors outline-none"
+                    className="w-full py-3 border-2 border-dashed border-[#c6c5d1] rounded-xl text-[10px] font-bold uppercase tracking-wider text-[#767681] hover:border-[#4b5b9a] hover:text-[#4b5b9a] hover:bg-[#dde1ff]/30 transition-colors outline-none mt-2"
                   >
                     + Thêm sản phẩm
                   </button>
                 </div>
               )}
 
-              {/* Hạng mục chi tiêu */}
               <div className="pt-5 border-t border-[#f3f3f8] space-y-4">
                 <p className="text-[9px] font-black uppercase text-[#4b5b9a] tracking-widest text-center">
-                  Chọn hạng mục chi tiêu
+                  Hạng mục tổng quát
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {loadingCategories ? (
@@ -551,7 +695,7 @@ export default function AddTransactionPage() {
                         key={cat.category_id}
                         onClick={() => {
                           setSelectedCategory(cat.category_id.toString());
-                          setCustomCategory(""); // Xóa text custom
+                          setCustomCategory("");
                         }}
                         className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all outline-none ${
                           selectedCategory === cat.category_id.toString()
@@ -569,16 +713,13 @@ export default function AddTransactionPage() {
                     ))
                   )}
                 </div>
-                {/* Chỉ có tab Chi Tiêu mới được tạo Hạng Mục Khác */}
                 <input
                   type="text"
                   placeholder="Tên hạng mục khác..."
                   value={customCategory}
                   onChange={(e) => {
                     setCustomCategory(e.target.value);
-                    if (e.target.value.trim() !== "") {
-                      setSelectedCategory(""); // Bỏ chọn hạng mục ở trên
-                    }
+                    if (e.target.value.trim() !== "") setSelectedCategory("");
                   }}
                   className="w-full px-4 py-3.5 bg-[#f3f3f8] rounded-xl border-none text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-[#4b5b9a]/40 placeholder:italic placeholder:font-medium"
                 />
@@ -587,7 +728,7 @@ export default function AddTransactionPage() {
           </>
         )}
 
-        {/* --- GIAO DIỆN KHOẢN THU --- */}
+        {/* --- GIAO DIỆN KHOẢN THU (Không áp dụng OCR) --- */}
         {transactionType === "income" && (
           <section className="bg-white p-5 rounded-2xl shadow-sm border border-[#e2e2e7]/50 space-y-5 animate-in fade-in duration-500">
             <div className="space-y-4 px-1">
@@ -614,8 +755,6 @@ export default function AddTransactionPage() {
                   }
                 />
               </div>
-
-              {/* Hạng mục Thu nhập (Không có ô tạo mục mới) */}
               <div className="pt-5 space-y-4 border-t border-[#f3f3f8]">
                 <p className="text-[9px] font-black uppercase text-[#10b981] tracking-widest text-center">
                   Chọn hạng mục thu nhập
@@ -653,7 +792,6 @@ export default function AddTransactionPage() {
           </section>
         )}
 
-        {/* Thông tin chung: Ngày & Ghi chú */}
         <section className="space-y-3">
           <div className="flex items-center bg-white p-3.5 rounded-xl gap-3 border border-[#e2e2e7]/50 shadow-sm">
             <span
@@ -682,9 +820,12 @@ export default function AddTransactionPage() {
             >
               description
             </span>
+            {/* Khi dùng OCR, Tên cửa hàng sẽ được gán vào Ghi chú tự động */}
             <input
               type="text"
-              placeholder="Ghi chú thêm..."
+              placeholder={
+                hasUploadedImage ? "Tên cửa hàng..." : "Ghi chú thêm..."
+              }
               value={note}
               onChange={(e) => setNote(e.target.value)}
               className="bg-transparent border-none p-0 text-xs font-medium flex-grow focus:outline-none text-[#1a1c1f] placeholder:text-[#c6c5d1]"
@@ -692,10 +833,9 @@ export default function AddTransactionPage() {
           </div>
         </section>
 
-        {/* Nút Save */}
         <button
           onClick={handleSave}
-          disabled={totalAmount <= 0 && isManualMode} // Block nếu không nhập tiền ở Manual Mode
+          disabled={totalAmount <= 0 && isManualMode}
           className={`w-full py-4 rounded-xl font-headline font-black text-base transition-all active:scale-[0.98] shadow-lg outline-none ${
             totalAmount <= 0 && isManualMode
               ? "bg-[#c6c5d1] text-white"
