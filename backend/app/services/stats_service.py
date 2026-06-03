@@ -7,6 +7,7 @@ from fastapi import Depends
 from ..config.database import get_db
 from ..models.transaction import Transaction
 from ..models.category import Category, TransactionType
+from ..models.user import User
 
 
 class StatsService:
@@ -71,7 +72,15 @@ class StatsService:
     async def get_daily_trend(self, user_id: int):
         today = date.today()
         year = today.year
-        start_date = date(year, 1, 1)
+        # 1. Tạo câu lệnh truy vấn (đoạn code của bạn)
+        start_date_query = select(
+            func.date(User.created_at)
+        ).where(User.user_id == user_id)
+
+        # 2. Thực thi và lấy giá trị bằng .scalar()
+        result = await self.db.execute(start_date_query)
+        start_date = result.scalar()  
+        # Kết quả ra thẳng: 2026-06-03 (hoặc datetime.date(2026, 6, 3))
 
         stmt = select(
             func.date(Transaction.transaction_date).label("date"),
@@ -110,7 +119,15 @@ class StatsService:
     async def get_weekly_trend(self, user_id: int):
         today = date.today()
         year = today.year
-        start_of_year = date(year, 1, 1)
+
+        start_of_year_query = select(
+            func.date(User.created_at)
+        ).where(User.user_id == user_id)
+
+        # 2. Thực thi và lấy giá trị bằng .scalar()
+        result = await self.db.execute(start_of_year_query)
+        start_of_year = result.scalar()  
+        
         final_end = today
         # Lùi về thứ 2 của tuần chứa 01/01
         week_start = start_of_year - timedelta(days=start_of_year.weekday())
