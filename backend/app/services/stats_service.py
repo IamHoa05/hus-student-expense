@@ -7,6 +7,7 @@ from fastapi import Depends
 from ..config.database import get_db
 from ..models.transaction import Transaction
 from ..models.category import Category, TransactionType
+from ..models.user import User
 
 
 class StatsService:
@@ -68,22 +69,33 @@ class StatsService:
     # ==========================================
     # 1. DAY — 01/01 → hôm nay, label "dd/MM"
     # ==========================================
-    async def get_daily_trend(self, user_id: int):
+    async def get_daily_trend(self, user_id: int, category_id: int = None):
         today = date.today()
         year = today.year
-        start_date = date(year, 1, 1)
+        
+        start_date_query = select(
+            func.date(User.created_at)
+        ).where(User.user_id == user_id)
+
+        result = await self.db.execute(start_date_query)
+        start_date = result.scalar()  
+
+        # Tạo điều kiện cơ bản
+        conditions = [
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.OUTFLOW,
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date < today + timedelta(days=1),
+        ]
+        
+        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
+        if category_id is not None:
+            conditions.append(Transaction.category_id == category_id)
 
         stmt = select(
             func.date(Transaction.transaction_date).label("date"),
             func.sum(Transaction.total_amount).label("day_total"),
-        ).where(
-            and_(
-                Transaction.user_id == user_id,
-                Transaction.transaction_type == TransactionType.OUTFLOW,
-                Transaction.transaction_date >= start_date,
-                Transaction.transaction_date < today + timedelta(days=1),  # fix: < ngày mai
-            )
-        ).group_by(func.date(Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(func.date(Transaction.transaction_date))
 
         result = await self.db.execute(stmt)
         db_data = {}
@@ -104,25 +116,25 @@ class StatsService:
 
     # ==========================================
     # 2. WEEK — chia tuần 01/01 → tuần chứa hôm nay
-    #    Mỗi tuần bắt đầu từ Thứ 2, tuần cuối cắt tại hôm nay
-    #    Label: "dd/MM-dd/MM"
     # ==========================================
-    async def get_weekly_trend(self, user_id: int):
+    async def get_weekly_trend(self, user_id: int, category_id: int = None):
         today = date.today()
         year = today.year
-        start_of_year = date(year, 1, 1)
-        final_end = today
-        # Lùi về thứ 2 của tuần chứa 01/01
+
+        start_of_year_query = select(
+            func.date(User.created_at)
+        ).where(User.user_id == user_id)
+
+        result = await self.db.execute(start_of_year_query)
+        start_of_year = result.scalar()  
+        
         week_start = start_of_year - timedelta(days=start_of_year.weekday())
-        # Tuần cuối kết thúc tại hôm nay
         final_end = today
 
-        # Tạo danh sách các tuần
         weeks = []
         current_week_start = week_start
         while current_week_start <= final_end:
             current_week_end = min(current_week_start + timedelta(days=6), final_end)
-            # Chỉ lấy tuần có overlap với năm hiện tại
             if current_week_end >= start_of_year:
                 actual_start = max(current_week_start, start_of_year)
                 weeks.append((actual_start, current_week_end))
@@ -132,19 +144,23 @@ class StatsService:
             return self._format_trend_response([])
 
         range_start = weeks[0][0]
-        range_end = weeks[-1][1]
+
+        # Tạo điều kiện cơ bản
+        conditions = [
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.OUTFLOW,
+            Transaction.transaction_date >= range_start,
+            Transaction.transaction_date < final_end + timedelta(days=1),
+        ]
+        
+        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
+        if category_id is not None:
+            conditions.append(Transaction.category_id == category_id)
 
         stmt = select(
             func.date(Transaction.transaction_date).label("date"),
             func.sum(Transaction.total_amount).label("day_total"),
-        ).where(
-            and_(
-                Transaction.user_id == user_id,
-                Transaction.transaction_type == TransactionType.OUTFLOW,
-                Transaction.transaction_date >= range_start,
-                Transaction.transaction_date < final_end + timedelta(days=1),  # fix
-        )
-        ).group_by(func.date(Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(func.date(Transaction.transaction_date))
 
         result = await self.db.execute(stmt)
         db_data = {}
@@ -169,23 +185,28 @@ class StatsService:
         return self._format_trend_response(chart_data)
 
     # ==========================================
-    # 3. MONTH — T1 → tháng hiện tại, label "Tháng M"
+    # 3. MONTH — T1 → tháng hiện tại
     # ==========================================
-    async def get_monthly_trend(self, user_id: int):
+    async def get_monthly_trend(self, user_id: int, category_id: int = None):
         today = date.today()
         year = today.year
         current_month = today.month
 
+        # Tạo điều kiện cơ bản
+        conditions = [
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.OUTFLOW,
+            func.extract("year", Transaction.transaction_date) == year,
+        ]
+        
+        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
+        if category_id is not None:
+            conditions.append(Transaction.category_id == category_id)
+
         stmt = select(
             func.extract("month", Transaction.transaction_date).cast(Integer).label("month"),
             func.sum(Transaction.total_amount).label("month_total"),
-        ).where(
-            and_(
-                Transaction.user_id == user_id,
-                Transaction.transaction_type == TransactionType.OUTFLOW,
-                func.extract("year", Transaction.transaction_date) == year,
-            )
-        ).group_by(func.extract("month", Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(func.extract("month", Transaction.transaction_date))
 
         result = await self.db.execute(stmt)
         db_data = {row.month: float(row.month_total) for row in result}
@@ -201,20 +222,20 @@ class StatsService:
         return self._format_trend_response(chart_data)
 
     # ==========================================
-    # DISPATCHER
+    # DISPATCHER (Bổ sung tham số category_id)
     # ==========================================
-    async def get_trend(self, user_id: int, period_type: str):
+    async def get_trend(self, user_id: int, period_type: str, category_id: int = None):
         if period_type == "day":
-            return await self.get_daily_trend(user_id)
+            return await self.get_daily_trend(user_id, category_id)
         elif period_type == "week":
-            return await self.get_weekly_trend(user_id)
+            return await self.get_weekly_trend(user_id, category_id)
         elif period_type == "month":
-            return await self.get_monthly_trend(user_id)
+            return await self.get_monthly_trend(user_id, category_id)
         else:
             raise ValueError("Invalid period type. Must be 'day', 'week', or 'month'.")
 
     # ==========================================
-    # HÀM PHỤ: min/max trên toàn bộ data trả về (bỏ qua amount = 0)
+    # HÀM PHỤ ĐỊNH DẠNG RESPONSE
     # ==========================================
     def _format_trend_response(self, chart_data: list) -> dict:
         highest = {"label": "N/A", "amount": 0.0}

@@ -29,6 +29,7 @@ async def get_stats(
 @router.get("/trend", response_model=TrendResponse)
 async def get_trend(
     query: TrendRequest = Depends(),
+    category_id: int = None,
     current_user: User = Depends(require_user),
     service: StatsService = Depends(get_stats_service),
 ):
