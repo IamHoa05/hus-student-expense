@@ -73,8 +73,8 @@ export default function DashboardPage() {
       const prevMonthNum = prevDate.getMonth() + 1;
       const prevYear = prevDate.getFullYear();
 
-      // Gọi đồng thời 3 API: Tháng hiện tại, Tháng trước (để tính Trend) và Danh sách giao dịch
-      const [currRes, prevRes, txRes] = await Promise.all([
+      // Gọi 3 API: Tổng quan tháng này, Tổng quan tháng trước, và Danh sách Thống kê chi tiêu
+      const [currRes, prevRes, statsRes] = await Promise.all([
         fetch(
           `${API_URL}/budgets/remaining?month=${currentMonthNum}&year=${currentYear}`,
           { credentials: "include" }
@@ -83,15 +83,23 @@ export default function DashboardPage() {
           `${API_URL}/budgets/remaining?month=${prevMonthNum}&year=${prevYear}`,
           { credentials: "include" }
         ),
-        fetch(`${API_URL}/transactions`, { credentials: "include" }),
+        fetch(
+          `${API_URL}/stats/statistics?month=${currentMonthNum}&year=${currentYear}`,
+          { credentials: "include" }
+        ),
       ]);
 
       const currJson = currRes.ok ? await currRes.json() : {};
       const prevJson = prevRes.ok ? await prevRes.json() : {};
-      const txJson = txRes.ok ? await txRes.json() : {};
+      const statsJson = statsRes.ok ? await statsRes.json() : [];
 
       const curr = currJson.data || currJson || {};
       const prev = prevJson.data || prevJson || {};
+
+      // Lấy danh sách thống kê đã tiêu
+      const statsData = Array.isArray(statsJson)
+        ? statsJson
+        : statsJson.data || [];
 
       // 1. GÁN KHOẢN DƯ & TỔNG CHI TIÊU
       setBalance({
@@ -114,75 +122,38 @@ export default function DashboardPage() {
       }
       setTrend(percent);
 
-      // 3. XỬ LÝ PHÂN BỔ CHI TIÊU (CHỈ LẤY CÁC MỤC ĐÃ PHÁT SINH GIAO DỊCH)
-      // B3.1: Gom nhóm số tiền chi tiêu THỰC TẾ từ lịch sử giao dịch (transactions)
-      const spentMap = new Map<number, number>();
-      const categoryInfoMap = new Map<number, { name: string; icon: string }>();
-
-      const groups = txJson?.data?.data || [];
-      groups.forEach((group: any) => {
-        (group.transactions || []).forEach((tx: any) => {
-          if (tx.transaction_type === "outflow") {
-            const catId = tx.category_id;
-            const prevSpent = spentMap.get(catId) || 0;
-            spentMap.set(catId, prevSpent + Number(tx.amount || 0));
-
-            // Lưu kèm tên và icon lỡ như API budgets không có
-            if (!categoryInfoMap.has(catId)) {
-              categoryInfoMap.set(catId, {
-                name: tx.category_name,
-                icon: tx.icon || "category",
-              });
-            }
-          }
-        });
-      });
-
-      // B3.2: Lấy thông tin Hạn mức (Limit) từ API remaining
-      const allocations = curr.allocations || [];
+      // 3. XỬ LÝ PHÂN BỔ CHI TIÊU
+      // B3.1: Lấy thông tin Hạn mức (limit) từ API remaining lưu vào Map để tra cứu
       const limitMap = new Map<number, number>();
-
+      const allocations = curr.allocations || [];
       allocations.forEach((alloc: any) => {
         limitMap.set(alloc.category_id, alloc.amount_limit || 0);
-        // Cập nhật tên/icon chuẩn từ API remaining nếu có
-        categoryInfoMap.set(alloc.category_id, {
-          name: alloc.category_name,
-          icon: alloc.icon || "category",
-        });
       });
 
-      // B3.3: Map ra mảng hiển thị, CHỈ LẤY những danh mục có Spent > 0
-      const mappedCategories: ExpenseCategory[] = [];
+      // B3.2: Duyệt qua danh sách đã tiêu (stats) để map ra dữ liệu hiển thị
+      const mappedCategories: ExpenseCategory[] = statsData.map((stat: any) => {
+        const spent = stat.total || 0;
+        const limit = limitMap.get(stat.category_id) || 0;
 
-      spentMap.forEach((spent, catId) => {
-        if (spent > 0) {
-          const limit = limitMap.get(catId) || 0;
-          const info = categoryInfoMap.get(catId) || {
-            name: "Khác",
-            icon: "category",
-          };
-
-          // Tự tính phần trăm ở Frontend
-          let calcPercent = 0;
-          if (limit > 0) {
-            calcPercent = Math.round((spent / limit) * 100);
-          } else {
-            // Không có hạn mức nhưng vẫn tiêu -> Thanh process bar đầy 100% (Hoặc bạn có thể để 0 tùy ý)
-            calcPercent = 100;
-          }
-
-          mappedCategories.push({
-            id: String(catId),
-            name: info.name,
-            amount: spent,
-            limit: limit,
-            percentage: calcPercent,
-            icon: info.icon,
-          });
+        // Tự tính phần trăm % của Thanh Ngân Sách (Đã tiêu / Hạn mức)
+        let calcPercent = 0;
+        if (limit > 0) {
+          calcPercent = Math.round((spent / limit) * 100);
+        } else if (spent > 0) {
+          calcPercent = 100; // Tiêu mà không có hạn mức thì thanh bar full đỏ
         }
+
+        return {
+          id: String(stat.category_id),
+          name: stat.category_name,
+          amount: spent,
+          limit: limit,
+          percentage: calcPercent,
+          icon: stat.icon || "category",
+        };
       });
 
-      // B3.4: Sắp xếp danh mục tiêu nhiều nhất lên đầu
+      // Sắp xếp danh mục tiêu nhiều nhất lên đầu
       mappedCategories.sort((a, b) => b.amount - a.amount);
 
       setCategories(mappedCategories);
