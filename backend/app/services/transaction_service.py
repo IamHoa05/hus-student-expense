@@ -29,10 +29,7 @@ class TransactionService:
 
     async def create_transaction(self, user_id: int, data: TransactionCreateSchema) -> TransactionResponseSchema:
         try:
-            dt = data.transaction_date
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-            transaction_date = dt.astimezone(VN_TZ).replace(tzinfo=None)
+            transaction_date = data.transaction_date.replace(tzinfo=None)
 
             new_trans = Transaction(
                 user_id=user_id,
@@ -40,7 +37,7 @@ class TransactionService:
                 total_amount=data.amount,
                 transaction_type=data.transaction_type,
                 transaction_date=transaction_date,
-                updated_at=datetime.now(VN_TZ).replace(tzinfo=None),  # ← sửa datetime.now()
+                updated_at=datetime.now(VN_TZ).replace(tzinfo=None),
                 source=data.source,
             )
             self.db.add(new_trans)

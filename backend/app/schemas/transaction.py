@@ -30,8 +30,11 @@ class TransactionCreateSchema(BaseModel):
     def convert_to_vn_time(cls, v: datetime) -> datetime:
         if v:
             if v.tzinfo is None:
-                v = v.replace(tzinfo=ZoneInfo("UTC"))
-            return v.astimezone(VN_TZ)
+                # Naive → coi là giờ VN, không phải UTC
+                v = v.replace(tzinfo=VN_TZ)
+            else:
+                # Có timezone (ví dụ client gửi UTC+0) → convert sang VN
+                v = v.astimezone(VN_TZ)
         return v
 
 
