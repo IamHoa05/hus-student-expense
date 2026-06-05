@@ -44,6 +44,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://hus-student-expense.vercel.app"  # <-- Bắt buộc phải có dòng này!
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # 1. Đưa SessionMiddleware lên trước
 app.add_middleware(
     SessionMiddleware,
@@ -55,16 +67,6 @@ app.add_middleware(
 
 # 2. Đặt CORSMiddleware ở CUỐI CÙNG (để nó bọc ngoài cùng, xử lý OPTIONS đầu tiên)
 # Đồng thời THÊM domain Vercel vào danh sách cho phép
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://hus-student-expense.vercel.app"  # <-- Bắt buộc phải có dòng này!
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 app.include_router(auth_router)

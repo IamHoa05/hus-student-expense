@@ -112,16 +112,25 @@ def issue_token(user, role: str = "user"):
     )
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    """Set token vào HttpOnly Cookie"""
+    """Set token vào HttpOnly Cookie hỗ trợ Cross-Site chạy trên Render + Vercel"""
     access_minutes = settings.OAUTH2_ACCESS_TOKEN_EXPIRE_MINUTES
     refresh_days = settings.OAUTH2_REFRESH_TOKEN_EXPIRE_DAYS
 
     response.set_cookie(
-        key="access_token", value=access_token, httponly=True,
-        samesite="lax", secure=False, path="/", max_age=access_minutes * 60
+        key="access_token", 
+        value=access_token, 
+        httponly=True,
+        samesite="none",   # 🔴 Sửa thành "none" để truyền xuyên domain
+        secure=True,       # 🔴 Sửa thành True (bắt buộc phải đi kèm samesite="none")
+        path="/", 
+        max_age=access_minutes * 60
     )
     response.set_cookie(
-        key="refresh_token", value=refresh_token, httponly=True,
-        samesite="lax", secure=False, path="/auth/refresh", max_age=refresh_days * 24 * 3600
+        key="refresh_token", 
+        value=refresh_token, 
+        httponly=True,
+        samesite="none",   # 🔴 Sửa thành "none"
+        secure=True,       # 🔴 Sửa thành True
+        path="/",          # 💡 Nên để "/" để các router khác cũng có thể đọc được khi cần refresh
+        max_age=refresh_days * 24 * 3600
     )
-
