@@ -1,6 +1,7 @@
 # services/stats_service.py
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 import calendar
+from zoneinfo import ZoneInfo  # Quản lý múi giờ chuẩn của Python
 from sqlalchemy import select, func, and_, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
@@ -9,6 +10,8 @@ from ..models.transaction import Transaction
 from ..models.category import Category, TransactionType
 from ..models.user import User
 
+# Định nghĩa múi giờ Việt Nam
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 class StatsService:
     def __init__(self, db: AsyncSession):
@@ -18,12 +21,15 @@ class StatsService:
     # THỐNG KÊ THEO DANH MỤC
     # ==========================================
     async def get_stats_by_category(self, user_id: int, month: int, year: int):
+        # Ép trường transaction_date sang múi giờ VN trước khi extract month/year
+        vn_date = func.timezone('Asia/Ho_Chi_Minh', Transaction.transaction_date)
+        
         total_stmt = select(func.sum(Transaction.total_amount)).where(
             and_(
                 Transaction.user_id == user_id,
                 Transaction.transaction_type == TransactionType.OUTFLOW,
-                func.extract('month', Transaction.transaction_date) == month,
-                func.extract('year', Transaction.transaction_date) == year
+                func.extract('month', vn_date) == month,
+                func.extract('year', vn_date) == year
             )
         )
         total_res = await self.db.execute(total_stmt)
@@ -44,8 +50,8 @@ class StatsService:
             and_(
                 Transaction.user_id == user_id,
                 Transaction.transaction_type == TransactionType.OUTFLOW,
-                func.extract('month', Transaction.transaction_date) == month,
-                func.extract('year', Transaction.transaction_date) == year
+                func.extract('month', vn_date) == month,
+                func.extract('year', vn_date) == year
             )
         ).group_by(
             Category.category_id,
@@ -70,45 +76,54 @@ class StatsService:
     # 1. DAY — 01/01 → hôm nay, label "dd/MM"
     # ==========================================
     async def get_daily_trend(self, user_id: int, category_id: int = None):
-        today = date.today()
-        year = today.year
+        # Lấy ngày hôm nay theo múi giờ Việt Nam chuẩn chỉnh
+        today = datetime.now(VN_TZ).date()
         
+        # Chuyển đổi ngày tạo user sang múi giờ VN
         start_date_query = select(
-            func.date(User.created_at)
+            func.date(func.timezone('Asia/Ho_Chi_Minh', User.created_at))
         ).where(User.user_id == user_id)
 
         result = await self.db.execute(start_date_query)
-        start_date = result.scalar()  
+        start_date = result.scalar() or today  
 
-        # Tạo điều kiện cơ bản
+        # Ép ngày giao dịch trong DB về múi giờ VN để so sánh và group
+        vn_tx_date = func.date(Transaction.transaction_date)
+
         conditions = [
             Transaction.user_id == user_id,
             Transaction.transaction_type == TransactionType.OUTFLOW,
-            Transaction.transaction_date >= start_date,
-            Transaction.transaction_date < today + timedelta(days=1),
+            vn_tx_date >= start_date,
+            vn_tx_date <= today,
         ]
         
-        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
         if category_id is not None:
             conditions.append(Transaction.category_id == category_id)
 
         stmt = select(
-            func.date(Transaction.transaction_date).label("date"),
+            vn_tx_date.label("date"),
             func.sum(Transaction.total_amount).label("day_total"),
-        ).where(and_(*conditions)).group_by(func.date(Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(vn_tx_date)
 
         result = await self.db.execute(stmt)
+        
+        # 🟢 SỬA TẠI ĐÂY: Ép tất cả key ngày về chuỗi string dạng 'YYYY-MM-DD'
         db_data = {}
         for row in result:
-            d = row.date if isinstance(row.date, date) else row.date.date()
-            db_data[d] = float(row.day_total)
+            if row.date is not None:
+                # Nếu là đối tượng date/datetime thì đổi sang string, ngược lại nếu là string sẵn thì giữ nguyên
+                date_str = row.date.strftime("%Y-%m-%d") if hasattr(row.date, "strftime") else str(row.date)
+                db_data[date_str] = float(row.day_total)
 
         chart_data = []
         current = start_date
         while current <= today:
+            # 🟢 SỬA TẠI ĐÂY: Chuyển ngày hiện tại 'current' sang string để so khớp chính xác với dict
+            current_str = current.strftime("%Y-%m-%d")
+            
             chart_data.append({
                 "label": current.strftime("%d/%m"),
-                "total_amount": db_data.get(current, 0.0),
+                "total_amount": db_data.get(current_str, 0.0), # Lấy tiền theo key string chuẩn đét
             })
             current += timedelta(days=1)
 
@@ -118,15 +133,15 @@ class StatsService:
     # 2. WEEK — chia tuần 01/01 → tuần chứa hôm nay
     # ==========================================
     async def get_weekly_trend(self, user_id: int, category_id: int = None):
-        today = date.today()
-        year = today.year
+        # Lấy ngày hôm nay theo múi giờ Việt Nam
+        today = datetime.now(VN_TZ).date()
 
         start_of_year_query = select(
-            func.date(User.created_at)
+            func.date(func.timezone('Asia/Ho_Chi_Minh', User.created_at))
         ).where(User.user_id == user_id)
 
         result = await self.db.execute(start_of_year_query)
-        start_of_year = result.scalar()  
+        start_of_year = result.scalar() or today  
         
         week_start = start_of_year - timedelta(days=start_of_year.weekday())
         final_end = today
@@ -144,23 +159,22 @@ class StatsService:
             return self._format_trend_response([])
 
         range_start = weeks[0][0]
+        vn_tx_date = func.date(func.timezone('Asia/Ho_Chi_Minh', Transaction.transaction_date))
 
-        # Tạo điều kiện cơ bản
         conditions = [
             Transaction.user_id == user_id,
             Transaction.transaction_type == TransactionType.OUTFLOW,
-            Transaction.transaction_date >= range_start,
-            Transaction.transaction_date < final_end + timedelta(days=1),
+            vn_tx_date >= range_start,
+            vn_tx_date <= final_end,
         ]
         
-        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
         if category_id is not None:
             conditions.append(Transaction.category_id == category_id)
 
         stmt = select(
-            func.date(Transaction.transaction_date).label("date"),
+            vn_tx_date.label("date"),
             func.sum(Transaction.total_amount).label("day_total"),
-        ).where(and_(*conditions)).group_by(func.date(Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(vn_tx_date)
 
         result = await self.db.execute(stmt)
         db_data = {}
@@ -188,25 +202,26 @@ class StatsService:
     # 3. MONTH — T1 → tháng hiện tại
     # ==========================================
     async def get_monthly_trend(self, user_id: int, category_id: int = None):
-        today = date.today()
+        # Lấy thông tin ngày tháng theo múi giờ Việt Nam
+        today = datetime.now(VN_TZ).date()
         year = today.year
         current_month = today.month
 
-        # Tạo điều kiện cơ bản
+        vn_date = func.timezone('Asia/Ho_Chi_Minh', Transaction.transaction_date)
+
         conditions = [
             Transaction.user_id == user_id,
             Transaction.transaction_type == TransactionType.OUTFLOW,
-            func.extract("year", Transaction.transaction_date) == year,
+            func.extract("year", vn_date) == year,
         ]
         
-        # KẾT HỢP: Nếu truyền category_id thì lọc riêng theo danh mục đó
         if category_id is not None:
             conditions.append(Transaction.category_id == category_id)
 
         stmt = select(
-            func.extract("month", Transaction.transaction_date).cast(Integer).label("month"),
+            func.extract("month", vn_date).cast(Integer).label("month"),
             func.sum(Transaction.total_amount).label("month_total"),
-        ).where(and_(*conditions)).group_by(func.extract("month", Transaction.transaction_date))
+        ).where(and_(*conditions)).group_by(func.extract("month", vn_date))
 
         result = await self.db.execute(stmt)
         db_data = {row.month: float(row.month_total) for row in result}
@@ -222,7 +237,7 @@ class StatsService:
         return self._format_trend_response(chart_data)
 
     # ==========================================
-    # DISPATCHER (Bổ sung tham số category_id)
+    # DISPATCHER
     # ==========================================
     async def get_trend(self, user_id: int, period_type: str, category_id: int = None):
         if period_type == "day":
