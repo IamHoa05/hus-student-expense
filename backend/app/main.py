@@ -49,9 +49,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     session_cookie="swallet_session",  
-    same_site="none",  # <-- BẮT BUỘC phải là "none" để Vercel và Render đọc được cookie của nhau
-    https_only=True,   # <-- BẮT BUỘC phải là True vì hai bên đều đang chạy HTTPS
-    domain=".onrender.com" # <-- (Tùy chọn) Thêm dòng này nếu muốn chỉ định rõ domain cấp phát cookie
+    same_site="none",  # Viết thường chữ "none"
+    https_only=True    # Không để dòng domain nữa để trình duyệt tự hiểu theo cơ chế Cross-Site
 )
 
 # 2. Đặt CORSMiddleware ở CUỐI CÙNG (để nó bọc ngoài cùng, xử lý OPTIONS đầu tiên)
