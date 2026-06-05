@@ -1,131 +1,253 @@
-from sqlalchemy import select
+from sqlalchemy import select, and_ , extract
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends, HTTPException, status
 from datetime import datetime
-from uuid import uuid4
 
-from ..models.category import Category
+from .notification_service import NotificationService
+from ..models.category import Category, TransactionType
 from ..models.transaction import Transaction, TransactionDetail, TransactionMedia
 from ..config.database import get_db
-from ..schemas.transaction import TransactionCreateSchema, MediaSchema, IncomeCreateSchema, ExpenseCreateSchema
-from fastapi import  Depends
+from ..schemas.transaction import (
+    TransactionCreateSchema, 
+    TransactionUpdateSchema, 
+    TransactionResponseSchema, 
+    TransactionsByDateSchema, 
+    TransactionsGroupedResponseSchema, 
+    TransactionDetailResponseSchema, 
+    TransactionSource
+)
+  
+from zoneinfo import ZoneInfo
+from collections import defaultdict
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 class TransactionService:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.notif_service = NotificationService(db)
 
-    async def create_new_transaction(self, user_id: int, data: TransactionCreateSchema):
+    async def create_transaction(self, user_id: int, data: TransactionCreateSchema) -> TransactionResponseSchema:
         try:
-            # 1. Tạo bản ghi chính (Bảng Transaction)
+            transaction_date = data.transaction_date.replace(tzinfo=None)
+
             new_trans = Transaction(
                 user_id=user_id,
-                group_id=data.group_id,
                 category_id=data.category_id,
                 total_amount=data.amount,
-                transaction_type=data.type.value if hasattr(data.type, 'value') else data.type,
-                transaction_date=data.transaction_date
+                transaction_type=data.transaction_type,
+                transaction_date=transaction_date,
+                updated_at=datetime.now(VN_TZ).replace(tzinfo=None),
+                source=data.source,
             )
             self.db.add(new_trans)
-            
-            # Đẩy dữ liệu xuống DB để lấy transaction_id tự tăng
-            await self.db.flush() 
-            generated_id = new_trans.transaction_id
+            await self.db.flush()
 
-            # 2. Tạo bản ghi chi tiết (Bảng TransactionDetail)
-            # Lấy hết các trường phụ từ Schema đã thiết kế
             new_detail = TransactionDetail(
-                transaction_id=generated_id,
-                store_name=data.store_name,
+                transaction_id=new_trans.transaction_id,
                 note=data.note,
-                payment_method=data.payment_method or "Tiền mặt", # Mặc định nếu FE không gửi
-                location=data.location
             )
             self.db.add(new_detail)
 
-            # 3. Xử lý Media & OCR (Bảng TransactionMedia)
-            # Chỉ tạo bản ghi này nếu có ảnh hoặc có dữ liệu quét AI
-            if data.image_url or data.ocr_raw:
-                new_media = TransactionMedia(
-                    transaction_id=generated_id,
-                    image_url=data.image_url,
-                    ocr_raw=data.ocr_raw,
-                    is_settled=True if data.image_url else False # Tự động đánh dấu nếu có ảnh
+            category = await self.db.get(Category, new_trans.category_id)
+
+            # ── Notification ─────────────────────────────────
+            await self.notif_service.on_transaction_created(
+                user_id=user_id,
+                amount=new_trans.total_amount,
+                category_name=category.category_name if category else "Khác",
+                transaction_type=new_trans.transaction_type,
+                transaction_id=new_trans.transaction_id,
+            )
+
+            if data.transaction_type == TransactionType.OUTFLOW and data.category_id:
+                await self.notif_service.check_budget_alert(
+                    user_id=user_id,
+                    category_id=data.category_id,
+                    category_name=category.category_name if category else "Khác",
+                    transaction_date=new_trans.transaction_date,
                 )
-                self.db.add(new_media)
+            # ─────────────────────────────────────────────────
 
-            # 4. Commit tất cả cùng một lúc (Atomic transaction)
             await self.db.commit()
-            
-            # Refresh để lấy đầy đủ object sau khi đã lưu thành công (tùy chọn)
             await self.db.refresh(new_trans)
-            
-            return generated_id
 
-        except Exception as e:
-            # Nếu có bất kỳ lỗi nào ở 1 trong 3 bảng, rollback toàn bộ để tránh rác dữ liệu
-            await self.db.rollback()
-            print(f"Error creating transaction: {str(e)}") # Log lỗi để debug
-            raise e
-    async def create_income(self, user_id: int, data: IncomeCreateSchema):
-        try:
-            # 1. Tạo bản ghi chính trong bảng transaction
-            new_trans = Transaction(
-                user_id=user_id,
-                category_id=data.category_id,
-                total_amount=data.amount,
-                transaction_type=data.type, # 'inflow'
-                transaction_date=data.transaction_date
+            return TransactionResponseSchema(
+                transaction_id=new_trans.transaction_id,
+                category_id=new_trans.category_id,
+                amount=new_trans.total_amount,
+                transaction_type=new_trans.transaction_type,
+                transaction_date=new_trans.transaction_date,
+                icon=category.icon if category else None,
+                category_name=category.category_name if category else None,
+                is_settled=False,
+                note=new_detail.note,
             )
-            self.db.add(new_trans)
-            
-            await self.db.flush() 
-            generated_id = new_trans.transaction_id
 
-            # 2. Tạo chi tiết (Ghi chú khoản thu)
-            new_detail = TransactionDetail(
-                transaction_id=generated_id,
-                note=data.note,
-                payment_method="Tiền mặt/Chuyển khoản"
-            )
-            self.db.add(new_detail)
-
-            await self.db.commit()
-            return generated_id
         except Exception as e:
             await self.db.rollback()
             raise e
+        
+    async def get_transactions(self, user_id: int) -> TransactionsGroupedResponseSchema:
+        stmt = (
+            select(
+                Transaction,
+                TransactionDetail.note,
+                Category.category_name,
+                Category.icon.label("icon"),
+                TransactionMedia.is_settled,
+            )
+            .join(TransactionDetail, TransactionDetail.transaction_id == Transaction.transaction_id, isouter=True)
+            .join(Category, Category.category_id == Transaction.category_id, isouter=True)
+            .join(TransactionMedia, TransactionMedia.transaction_id == Transaction.transaction_id, isouter=True)
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.transaction_date.desc())
+        )
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        vn_tz = ZoneInfo("Asia/Ho_Chi_Minh")
+        grouped = defaultdict(list)
+
+        for row in rows:
+            trans_dt = row.Transaction.transaction_date
+            date_key = trans_dt.strftime("%Y-%m-%d")
+            
+            grouped[date_key].append(
+                TransactionResponseSchema(
+                    transaction_id=row.Transaction.transaction_id,
+                    category_id=row.Transaction.category_id,
+                    amount=row.Transaction.total_amount,
+                    transaction_type=row.Transaction.transaction_type,
+                    transaction_date=row.Transaction.transaction_date,
+                    icon=row.icon,
+                    category_name=row.category_name,
+                    is_settled=row.is_settled or False,
+                    note=row.note,
+                    source=row.Transaction.source,
+                )
+            )
+
+        data = [
+            TransactionsByDateSchema(date=date, transactions=txns)
+            for date, txns in sorted(grouped.items(), reverse=True)
+        ]
+
+        return TransactionsGroupedResponseSchema(data=data)
+    async def get_transaction_by_id(self, user_id: int, transaction_id: int) -> TransactionDetailResponseSchema:
+        stmt = (
+            select(
+                Transaction,
+                TransactionDetail.note,
+                TransactionDetail.store_name,
+                TransactionDetail.payment_method,
+                TransactionDetail.location,
+                TransactionDetail.tags,
+                TransactionMedia.image_url,
+                TransactionMedia.is_settled,
+                TransactionMedia.ocr_raw,
+                Category.category_name,
+                Category.icon.label("icon"),
+            )
+            .join(TransactionDetail, TransactionDetail.transaction_id == Transaction.transaction_id, isouter=True)
+            .join(TransactionMedia, TransactionMedia.transaction_id == Transaction.transaction_id, isouter=True)
+            .join(Category, Category.category_id == Transaction.category_id, isouter=True)
+            .where(
+                and_(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.user_id == user_id
+                )
+            )
+        )
+        result = await self.db.execute(stmt)
+        row = result.one_or_none()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
+
+        return TransactionDetailResponseSchema(
+            transaction_id=row.Transaction.transaction_id,
+            category_id=row.Transaction.category_id,
+            amount=row.Transaction.total_amount,
+            transaction_type=row.Transaction.transaction_type,
+            transaction_date=row.Transaction.transaction_date,
+            source=row.Transaction.source,
+            icon=row.icon,
+            category_name=row.category_name,
+            is_settled=row.is_settled or False,
+            note=row.note,
+            store_name=row.store_name,
+            payment_method=row.payment_method,
+            location=row.location,
+            tags=row.tags,
+            image_url=row.image_url,
+            ocr_raw=row.ocr_raw,
+        )
+    async def delete_transaction(self, user_id: int, transaction_id: int):
+        transaction = await self.get_transaction_by_id(user_id, transaction_id)
+        await self.db.delete(transaction)
+        await self.db.commit()
+        return {"message": "Đã xóa giao dịch"}
+
+    async def get_invoice_image(self, user_id: int, transaction_id: int) -> dict:
+        # Kiểm tra transaction thuộc về user
+        stmt = select(Transaction).where(
+            Transaction.transaction_id == transaction_id,
+            Transaction.user_id == user_id
+        )
+        result = await self.db.execute(stmt)
+        transaction = result.scalar_one_or_none()
+
+        if not transaction:
+            raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
+
+        # Lấy media
+        stmt = select(TransactionMedia).where(
+            TransactionMedia.transaction_id == transaction_id
+        )
+        result = await self.db.execute(stmt)
+        media = result.scalar_one_or_none()
+
+        if not media or not media.image_url:
+            raise HTTPException(status_code=404, detail="Giao dịch này không có ảnh hóa đơn")
+
+        return {
+            "transaction_id": transaction_id,
+            "image_url": media.image_url,
+            "is_settled": media.is_settled
+        }
     
-    async def create_expense(self, user_id: int, data: ExpenseCreateSchema):
-        try:
-            # 1. Tạo bản ghi chính trong bảng transaction
-            new_trans = Transaction(
-                user_id=user_id,
-                category_id=data.category_id,
-                total_amount=data.amount,
-                transaction_type=data.type, # 'inflow'
-                transaction_date=data.transaction_date
+    async def get_invoices_by_month(self, user_id: int, month: int, year: int) -> list:
+        stmt = (
+            select(Transaction, TransactionMedia)
+            .join(TransactionMedia, Transaction.transaction_id == TransactionMedia.transaction_id)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.source == TransactionSource.OCR,
+                extract("month", Transaction.transaction_date) == month,
+                extract("year", Transaction.transaction_date) == year,
+                TransactionMedia.image_url.isnot(None),
             )
-            self.db.add(new_trans)
-            
-            await self.db.flush() 
-            generated_id = new_trans.transaction_id
+            .order_by(Transaction.transaction_date.desc())
+        )
+        result = await self.db.execute(stmt)
+        rows = result.all()
 
-            # 2. Tạo chi tiết (Ghi chú khoản thu)
-            new_detail = TransactionDetail(
-                transaction_id=generated_id,
-                note=data.note,
-                payment_method="Tiền mặt/Chuyển khoản"
-            )
-            self.db.add(new_detail)
+        # Group theo image_url — mỗi hóa đơn 1 dòng
+        seen = set()
+        invoices = []
+        for trans, media in rows:
+            if media.image_url in seen:
+                continue
+            seen.add(media.image_url)
+            invoices.append({
+                "image_url": media.image_url,
+                "transaction_date": trans.transaction_date,
+                "total_amount": float(sum(
+                    t.total_amount for t, m in rows if m.image_url == media.image_url
+                )),
+            })
 
-            await self.db.commit()
-            return generated_id
-        except Exception as e:
-            await self.db.rollback()
-            raise e
-    
-
-
-# Dependency để Controller gọi
+        return invoices
 async def get_transaction_service(db: AsyncSession = Depends(get_db)):
     return TransactionService(db)
-

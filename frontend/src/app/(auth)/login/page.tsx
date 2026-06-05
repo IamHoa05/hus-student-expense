@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Thêm state ẩn/hiện mật khẩu
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleEmailLoginClick = () => {
@@ -51,50 +53,53 @@ export default function LoginPage() {
       }
 
       // 3. THÀNH CÔNG: Lưu thông tin cơ bản (tùy chọn) và chuyển trang
-      // Backend của Hòa đã tự set set_auth_cookies rồi nên không cần lưu token thủ công
+      // Backend đã tự set_auth_cookies rồi nên không cần lưu token thủ công
       console.log("Đăng nhập thành công:", data);
-      
-      router.push("/dashboard");
 
+      router.push("/dashboard");
     } catch (err: any) {
       setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
     }
   };
 
   const handleGoogleLogin = () => {
-  // Chuyển hướng trình duyệt thẳng tới API của Backend
-  window.location.href = `${API_URL}/auth/google/login?next=/dashboard`;
-};
+    // Chuyển hướng trình duyệt thẳng tới API của Backend
+    window.location.href = `${API_URL}/auth/google/login?next=/dashboard`;
+  };
 
   return (
     // 1. Loại bỏ các class chia cột flex-row, giữ lại flex-col và căn giữa tuyệt đối
-    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
+    <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden">
       {/* 2. Đưa main về chuẩn max-w-md mx-auto, bỏ các lề lg/xl thừa */}
-      <main className="w-full max-w-md mx-auto px-6 py-12 flex flex-col justify-center relative z-10 min-h-screen">
+      <main className="w-full max-w-md mx-auto px-6 py-12 flex flex-col justify-center relative z-10 min-h-[100dvh]">
         {/* Background Organic Ornaments */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-[#94a3e8]/20 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10"></div>
         <div className="absolute top-1/2 -left-32 w-64 h-64 bg-[#e0e2f1]/30 rounded-[60%_40%_70%_30%/30%_60%_40%_70%] blur-3xl -z-10"></div>
 
         {/* Branding Section */}
-        <header className="text-center mb-10 pt-8">
-          <div className="mb-6 flex justify-center">
-            {/* 3. Sửa Logo: Bỏ rotate-3, làm cho vuông vắn và sang trọng */}
-            <div className="w-16 h-16 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] rounded-2xl flex items-center justify-center shadow-lg shadow-[#4b5b9a]/20">
-              <span
-                className="material-symbols-outlined text-white text-4xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                auto_awesome
-              </span>
+        <header className="text-center mb-8 pt-6">
+          <div className="mb-3 flex justify-center">
+            {/* Logo mới từ file SVG */}
+            <div className="w-100 h-100 relative flex items-center justify-center">
+              <Image
+                src="/image/logo_clean_blue_pink.svg"
+                alt="TIÊU TỈNH Logo"
+                width={180}
+                height={180}
+                priority
+                className="object-contain"
+              />
             </div>
           </div>
-          <h1 className="font-headline font-extrabold text-4xl italic tracking-tighter text-[#4b5b9a] mb-2">
-            Momentum
+          <h1 className="font-headline font-extrabold text-4xl tracking-tighter text-[#4b5b9a] mb-2">
+            TIÊU TỈNH
           </h1>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-[#1a1c1f] mt-4">
-            Chào mừng đến với Momentum
+
+          {/* Ép 1 dòng và tự động bóp nhỏ font chữ */}
+          <h2 className="font-headline text-[clamp(1.1rem,6vw,1.5rem)] font-bold tracking-tight text-[#1a1c1f] mt-4 whitespace-nowrap">
+            Chào mừng đến với TIÊU TỈNH
           </h2>
-          <p className="text-[#616470] mt-2 font-medium">
+          <p className="text-[#616470] mt-2 font-medium text-[clamp(0.75rem,4vw,1rem)] whitespace-nowrap">
             Bắt đầu hành trình tự chủ tài chính của bạn
           </p>
         </header>
@@ -190,8 +195,8 @@ export default function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="momentum@edu.vn"
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
+                    placeholder="tieutinh@edu.vn"
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none outline-none focus:text-[#1a1c1f] transition-all"
                   />
                 </div>
               </div>
@@ -209,14 +214,26 @@ export default function LoginPage() {
                   </span>
                   <input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"} // Thay đổi type dựa trên state
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-[#f3f3f8] border-none focus:ring-2 focus:ring-[#94a3e8] text-[#1a1c1f] font-medium placeholder:text-[#c6c5d1] transition-all"
+                    className="w-full pl-11 pr-12 py-3.5 rounded-xl bg-[#f3f3f8] border-none outline-none focus:text-[#1a1c1f] transition-all" // Tăng padding phải (pr-12) để tránh chữ đè lên icon
                   />
+
+                  {/* Nút con mắt */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#c6c5d1] hover:text-[#4b5b9a] transition-colors focus:outline-none"
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {showPassword ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
                 </div>
-                 {/* THÊM MỚI: Link Quên mật khẩu */}
+
+                {/* Link Quên mật khẩu */}
                 <div className="flex justify-end pt-1">
                   <Link
                     href="/forgot-password"
@@ -225,7 +242,6 @@ export default function LoginPage() {
                     Quên mật khẩu?
                   </Link>
                 </div>
-                
               </div>
 
               <button
@@ -239,7 +255,7 @@ export default function LoginPage() {
         </div>
 
         {/* Divider */}
-        <div className="w-full flex items-center gap-4 my-10">
+        <div className="w-full flex items-center gap-4 my-5">
           <div className="h-[1px] flex-grow bg-[#c6c5d1]/30"></div>
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#616470]">
             Hoặc tham gia ngay
@@ -289,7 +305,7 @@ export default function LoginPage() {
             </button>
           </div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-[#c6c5d1] font-bold">
-            Bản quyền © 2026 Momentum Inc.
+            Bản quyền © 2026 TIÊU TỈNH Inc.
           </p>
         </footer>
       </main>

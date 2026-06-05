@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-# 1. URL phải bắt đầu bằng postgresql+asyncpg (Hoa nhớ cài pip install asyncpg nhé)
+# 1. URL phải bắt đầu bằng postgresql+asyncpg 
 SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:password123@db:5432/spending_db"
 
 # 2. Tạo Engine bất đồng bộ

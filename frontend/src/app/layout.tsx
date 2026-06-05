@@ -2,7 +2,7 @@ import "./globals.css";
 import BottomNavigation from "@/components/layout/BottomNavigation";
 
 export const metadata = {
-  title: "Momentum",
+  title: "Tiêu Tỉnh",
   description: "Quản lý chi tiêu thông minh",
 };
 

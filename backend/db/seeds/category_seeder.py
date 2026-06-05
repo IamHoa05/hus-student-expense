@@ -2,63 +2,67 @@ import sys
 import os
 import asyncio
 
-# 1. Thêm thư mục gốc vào PYTHONPATH
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.config.database import AsyncSessionLocal, engine
-from app.models.category import Category, Base
+from app.config.database import AsyncSessionLocal, engine, Base
+from app.models.category import Category, TransactionType
+from app.models.user import User
+from app.models.transaction import Transaction, TransactionDetail, TransactionMedia
+from app.models.financial import Budget
+from app.models.notification import Notification
+
 from sqlalchemy.future import select
 
 async def init_db():
-    """Tạo tất cả các bảng dựa trên khai báo Model"""
     print("🚀 Đang khởi tạo cấu trúc các bảng...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("✅ Cấu trúc CSDL đã sẵn sàng!")
 
 async def seed_categories():
-    # Cập nhật danh sách với transaction_type chuẩn: inflow/outflow
     categories = [
-        # Nhóm Chi tiêu (outflow)
-        {"name": "Ăn uống", "type": "outflow"},
-        {"name": "Học tập", "type": "outflow"},
-        {"name": "Di chuyển", "type": "outflow"},
-        {"name": "Dịch vụ", "type": "outflow"},
-        {"name": "Mua sắm", "type": "outflow"},
-        {"name": "Giải trí", "type": "outflow"},
-        {"name": "Cố định", "type": "outflow"},
-        {"name": "Nhóm", "type": "outflow"},
-        {"name": "Khác", "type": "outflow"},
-        
-        # Nhóm Thu nhập (inflow)
-        {"name": "Thu nhập", "type": "inflow"},
+        # Chi tiêu
+        {"name": "Ăn uống",       "icon": "restaurant",       "type": TransactionType.OUTFLOW},
+        {"name": "Học tập",       "icon": "school",            "type": TransactionType.OUTFLOW},
+        {"name": "Di chuyển",     "icon": "directions_bus",    "type": TransactionType.OUTFLOW},
+        {"name": "Dịch vụ",       "icon": "settings_suggest",  "type": TransactionType.OUTFLOW},
+        {"name": "Mua sắm",       "icon": "shopping_bag",      "type": TransactionType.OUTFLOW},
+        {"name": "Giải trí",      "icon": "sports_esports",    "type": TransactionType.OUTFLOW},
+        {"name": "Sức khỏe",      "icon": "favorite",          "type": TransactionType.OUTFLOW},
+        {"name": "Cố định",       "icon": "home_work",         "type": TransactionType.OUTFLOW},
+        {"name": "Khác",          "icon": "more_horiz",        "type": TransactionType.OUTFLOW},
+        # Thu nhập
+        {"name": "Lương",         "icon": "payments",          "type": TransactionType.INFLOW},
+        {"name": "Thưởng",        "icon": "card_giftcard",     "type": TransactionType.INFLOW},
+        {"name": "Tiền tiêu vặt", "icon": "savings",           "type": TransactionType.INFLOW},
+        {"name": "Thu nhập khác", "icon": "account_balance",   "type": TransactionType.INFLOW},
     ]
 
     async with AsyncSessionLocal() as session:
         try:
             print("🌱 Đang đổ dữ liệu mẫu...")
             for cat_data in categories:
-                # Kiểm tra trùng lặp dựa trên cả Tên và Loại để tránh nhầm lẫn
                 stmt = select(Category).where(
-                    (Category.name == cat_data["name"]) & 
+                    (Category.category_name == cat_data["name"]) &
                     (Category.transaction_type == cat_data["type"])
                 )
                 result = await session.execute(stmt)
-                existing_cat = result.scalar_one_or_none()
+                existing = result.scalar_one_or_none()
 
-                if not existing_cat:
-                    new_cat = Category(
-                        name=cat_data["name"],
-                        transaction_type=cat_data["type"], # Đã mở comment và dùng đúng tên cột
-                        user_id=None # Đây là danh mục hệ thống dùng chung
-                    )
-                    session.add(new_cat)
-                    print(f"   [+] Added: {cat_data['name']} ({cat_data['type']})")
+                if not existing:
+                    session.add(Category(
+                    category_name=cat_data["name"],
+                    transaction_type=cat_data["type"],
+                    icon=cat_data["icon"],
+                    is_system=True,
+                    user_id=None
+                ))
+                    print(f"   [+] Added: {cat_data['name']} ({cat_data['type'].value})")
                 else:
-                    print(f"   [-] Skipped: {cat_data['name']} (Already exists)")
-            
+                    print(f"   [-] Skipped: {cat_data['name']}")
+
             await session.commit()
-            print("✨ --- Seeding completed! ---")
+            print("✨ Seeding hoàn tất!")
         except Exception as e:
             print(f"❌ Lỗi khi seeding: {e}")
             await session.rollback()
@@ -69,7 +73,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
 
 # docker exec -it fastapi_app python /code/db/seeds/category_seeder.py
 
@@ -86,5 +89,4 @@ if __name__ == "__main__":
 # docker exec -it fastapi_app python /code/db/seeds/category_seeder.py
 
 # 5. xem logs để kiểm tra kết quả
-#/// docker logs -f fastapi_app
-#docker compose logs -f
+# docker logs -f fastapi_app

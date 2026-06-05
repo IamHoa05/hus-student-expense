@@ -1,18 +1,33 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.config.database import engine, Base
-from app.config.settings import settings
 from starlette.middleware.sessions import SessionMiddleware
 
-# Import models
-from app.models.user import User
-from app.models.group import Group, GroupMember
-from app.models.category import Category
-from app.models.transaction import Transaction, TransactionDetail, TransactionMedia, ExpenseSplit
-from app.models.financial import Budget, SavingGoal
+from app.config.database import engine, Base
+from app.config.settings import settings
 
-# 1. Khởi tạo bảng
+# Import models để SQLAlchemy nhận diện khi tạo bảng
+from app.models.user import User
+from app.models.category import Category
+from app.models.transaction import Transaction, TransactionDetail, TransactionMedia  
+from app.models.financial import Budget  # 
+from app.models.notification import Notification
+
+
+# Import routers
+from app.controllers.auth_controller import router as auth_router
+from app.controllers.avatar_controller import router as avatar_router   
+from app.controllers.transaction_controller import router as transaction_router
+from app.controllers.category_controller import router as category_router
+from app.controllers.budget_controller import router as budget_router
+from app.controllers.stats_controller import router as stats_router
+from app.controllers.ocr_controller import router as ocr_router 
+from app.controllers.export_controller import router as export_router
+from app.controllers.notification_controller import router as notification_router   
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
 async def init_models():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -23,25 +38,20 @@ async def lifespan(app: FastAPI):
     await init_models()
     yield
 
-# 2. Khởi tạo App DUY NHẤT MỘT LẦN
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
     lifespan=lifespan
 )
 
-import os
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-
 app.add_middleware(
-    SessionMiddleware, 
+    SessionMiddleware,
     secret_key=settings.SECRET_KEY,
-    session_cookie="momentum_session",
-    same_site="lax",   # BẮT BUỘC: Cho phép gửi cookie giữa các port localhost
-    https_only=False   # BẮT BUỘC: Vì Hòa đang dùng http thường
+    session_cookie="swallet_session",  
+    same_site="lax",
+    https_only=False
 )
 
-# 3. Cấu hình CORS (Phải có để Frontend gọi được)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -50,15 +60,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 4. CẮM CÁC ROUTER (Link các chức năng vào đây)
-from .controllers.auth_controller import router as auth_router
 app.include_router(auth_router)
-
-from .controllers.transaction_controller import router as transaction_router
+app.include_router(avatar_router)   
+app.include_router(ocr_router) 
 app.include_router(transaction_router)
-
-from .controllers.category_controller import router as category_router
 app.include_router(category_router)
-
-from .controllers.budget_controller import router as budget_router
 app.include_router(budget_router)
+app.include_router(stats_router) 
+app.include_router(export_router)
+app.include_router(notification_router)

@@ -11,33 +11,51 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - expense-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: transminer-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    ports:
+      - "9004:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - expense-network  # fix: đổi sang expense-network
 
   backend:
     build: ./backend
     container_name: fastapi_app
+    env_file:
+      - ./backend/.env
     environment:
-      - ENABLE_AI=false
       - PYTHONDONTWRITEBYTECODE=1
-      - DATABASE_URL=postgresql://user:password@db:5432/dbname 
-    deploy:
-      resources:
-        limits:
-          memory: 4G 
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
+      - DATABASE_URL=postgresql+asyncpg://postgres:password123@db:5432/spending_db
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/code
-      - ./backend/models:/code/models 
-    env_file:
-      - ./backend/.env
-    # Dùng sh -c để chạy nhiều lệnh
-    command: >
-      sh -c "python /code/download_model.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy  # thêm: chờ minio sẵn sàng
     networks:
       - expense-network
 
@@ -47,14 +65,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Sửa cổng thành 8000 để khớp với backend bên trên
       - NEXT_PUBLIC_API_URL=http://localhost:8000
-
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
-      
     networks:
       - expense-network
     depends_on:
@@ -62,6 +77,7 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:   # fix: thêm volume
 
 networks:
   expense-network:

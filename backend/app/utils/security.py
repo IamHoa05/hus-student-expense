@@ -95,10 +95,8 @@ def verify_refresh_token(token: str):
     except (ExpiredSignatureError, InvalidTokenError) as e:
         raise e
 
-def issue_token(user, role: str = "user"): # Cho role mặc định là "user" luôn
+def issue_token(user, role: str = "user"):
     access_expires = settings.OAUTH2_ACCESS_TOKEN_EXPIRE_MINUTES
-    
-    # Tạo token với sub là email, role là "user"
     access_token = create_access_token(sub=user.email, role=role, expires_minutes=access_expires)
     refresh_token = create_refresh_token(sub=user.email, role=role)
 
@@ -107,9 +105,10 @@ def issue_token(user, role: str = "user"): # Cho role mặc định là "user" l
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=access_expires * 60,
-        scope=role,        # Trả về "user" cho đúng chuẩn OAuth2
         user_id=user.user_id,
+        full_name=user.full_name,  # ✅ Thêm full_name
         email=user.email
+        # ✅ Bỏ scope — không có trong OAuth2Token schema
     )
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):

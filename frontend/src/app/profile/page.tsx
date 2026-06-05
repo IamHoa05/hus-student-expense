@@ -1,425 +1,508 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
-// =======================================================================
-// MOCK DATA
-// =======================================================================
-const INITIAL_BUDGETS = [
-  {
-    id: "b_food",
-    name: "Ăn uống",
-    spent: 4200000,
-    limit: 5000000,
-    icon: "restaurant",
-    color: "bg-[#4b5b9a]",
-  },
-  {
-    id: "b_transport",
-    name: "Di chuyển",
-    spent: 600000,
-    limit: 1500000,
-    icon: "directions_bus",
-    color: "bg-[#94a3e8]",
-  },
-  {
-    id: "b_shopping",
-    name: "Mua sắm",
-    spent: 1800000,
-    limit: 2000000,
-    icon: "shopping_bag",
-    color: "bg-[#ba1a1a]",
-  },
-  {
-    id: "b_custom_1",
-    name: "Thú cưng", // Hạng mục người dùng tự thêm
-    spent: 450000,
-    limit: 1000000,
-    icon: "pets",
-    color: "bg-[#10b981]",
-  },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("vi-VN").format(amount);
-};
 const getInitials = (name: string) => {
-  const names = name.split(" ");
-  if (names.length >= 2) {
-    // Lấy chữ cái đầu của từ đầu và từ cuối (Ví dụ: Nguyễn Minh Duyên -> ND)
-    return (
-      names[0].charAt(0) + names[names.length - 1].charAt(0)
-    ).toUpperCase();
-  }
-  return name.charAt(0).toUpperCase();
+  if (!name.trim()) return "U";
+  const names = name.trim().split(" ");
+  return names.length >= 2
+    ? (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
+    : name.charAt(0).toUpperCase();
+};
+
+type Category = {
+  category_id: number;
+  category_name: string;
+  transaction_type: string;
+  icon: string;
 };
 
 export default function ProfilePage() {
   const router = useRouter();
 
-  // =========================================
-  // STATES: Hồ sơ cá nhân
-  // =========================================
+  // Chặn lỗi Hydration
+  const [isMounted, setIsMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // States thông tin người dùng
   const [profile, setProfile] = useState({
-    name: "Duyên",
-    email: "duyen.ds@vnu.edu.vn",
-    userId: "user_12345", // ID mặc định khi đăng ký
-    hasChangedId: false, // Cờ kiểm tra xem đã đổi ID lần nào chưa
-    plan: "Premium Plan",
-    status: "Active",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuB72RPYIq7DiM-iBtMl9Bd5b6OJTTQoh8f21jkInOk9cXa2k192X-rO9TZ3aLW_dWWOmqzcTmS_UUHM05I_0eObC0sdC_VENaBBz1UT0VPd_f0EJYC2avUn0OpfKMS9v5btW8y_C5ypySyXWd83U7BAyQwMF4pfeOu2bsVeIxygQxBj9cuTBx1A-tEUCoSMS4ievAiUyLv_5b4Kq1kkEIlHsxajpF1FqjKgaBlQEgH6T-iT9Mg6pb1RInAVx1XqaRe26cGZaQy29pU",
+    name: "",
+    email: "",
+    number: "",
+  });
+  const [editName, setEditName] = useState("");
+  const [avtUrl, setAvtUrl] = useState<string | null>(null);
+
+  // States quản lý hạng mục và hạn mức
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [budgets, setBudgets] = useState<Record<number, number>>({});
+  const [changedBudgets, setChangedBudgets] = useState<Record<number, number>>(
+    {}
+  );
+
+  // States quản lý trạng thái loading riêng biệt
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingBudgets, setIsSavingBudgets] = useState(false);
+  const [isUploadingAvt, setIsUploadingAvt] = useState(false);
+
+  // Quản lý thông báo Popup (Toast)
+  const [toast, setToast] = useState<{ show: boolean; msg: string }>({
+    show: false,
+    msg: "",
   });
 
-  // State tạm để lưu giá trị đang gõ trên Form
-  const [editProfile, setEditProfile] = useState({
-    name: profile.name,
-    userId: profile.userId,
-  });
-
-  const isProfileChanged =
-    editProfile.name !== profile.name || editProfile.userId !== profile.userId;
-
-  const handleSaveProfile = () => {
-    if (!editProfile.name.trim() || !editProfile.userId.trim()) {
-      alert("Tên và ID không được để trống!");
-      return;
-    }
-
-    const willChangeId = editProfile.userId !== profile.userId;
-
-    if (willChangeId && profile.hasChangedId) {
-      alert("Bạn chỉ được phép đổi ID 1 lần duy nhất!");
-      return;
-    }
-
-    // Cập nhật Profile chính thức
-    setProfile({
-      ...profile,
-      name: editProfile.name,
-      userId: editProfile.userId,
-      hasChangedId: profile.hasChangedId || willChangeId,
-    });
-
-    alert("Cập nhật thông tin cá nhân thành công!");
+  const triggerToast = (msg: string) => {
+    setToast({ show: true, msg });
+    setTimeout(() => {
+      setToast({ show: false, msg: "" });
+    }, 2500);
   };
 
-  // =========================================
-  // STATES: Cài đặt và Hạn mức
-  // =========================================
-  const [alertLimit, setAlertLimit] = useState(true);
-  const [weeklyReport, setWeeklyReport] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+    fetchUser();
+    fetchCategories();
+    fetchBudgets();
+  }, []);
 
-  const [budgets, setBudgets] = useState(INITIAL_BUDGETS);
-  const [isBudgetChanged, setIsBudgetChanged] = useState(false);
+  // ==========================================================
+  // 1. LẤY THÔNG TIN NGƯỜI DÙNG
+  // ==========================================================
+  const fetchUser = async () => {
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, {
+        credentials: "include",
+      });
+      if (!response.ok) return;
+      const data = await response.json();
 
-  const handleBudgetChange = (id: string, newLimitStr: string) => {
-    const rawValue = parseInt(newLimitStr.replace(/\D/g, ""), 10) || 0;
-    setBudgets(
-      budgets.map((b) => (b.id === id ? { ...b, limit: rawValue } : b))
+      setProfile({
+        name: data.full_name || "",
+        email: data.email || "",
+        number: data.phone || data.number || "",
+      });
+      setEditName(data.full_name || "");
+
+      // Xử lý ảnh đại diện (Bỏ qua nếu backend trả chữ "string" mặc định)
+      if (data.avt_url && data.avt_url !== "string") {
+        setAvtUrl(data.avt_url);
+      } else {
+        setAvtUrl(null);
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải thông tin user:", err);
+    }
+  };
+
+  // ==========================================================
+  // 2. TẢI ẢNH ĐẠI DIỆN LÊN (POST /avatars/me)
+  // ==========================================================
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Dùng FormData để gửi file ảnh
+    const formData = new FormData();
+    formData.append("file", file); // Trường dữ liệu thường là 'file'
+
+    setIsUploadingAvt(true);
+    try {
+      const res = await fetch(`${API_URL}/avatars/me`, {
+        method: "POST",
+        credentials: "include",
+        body: formData, // Không set Content-Type để trình duyệt tự nhận multipart/form-data
+      });
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      setAvtUrl(data.avt_url);
+      triggerToast("✅ Đã cập nhật ảnh đại diện!");
+    } catch (err) {
+      triggerToast("❌ Lỗi tải ảnh lên!");
+    } finally {
+      setIsUploadingAvt(false);
+      // Xóa value để có thể chọn lại cùng 1 file nếu cần
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // ==========================================================
+  // 3. XÓA ẢNH ĐẠI DIỆN (DELETE /avatars/me)
+  // ==========================================================
+  const handleDeleteAvatar = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Ngăn click nhầm vào nút upload bên dưới
+    try {
+      const res = await fetch(`${API_URL}/avatars/me`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error();
+
+      setAvtUrl(null);
+      triggerToast("✅ Đã xóa ảnh đại diện!");
+    } catch (err) {
+      triggerToast("❌ Lỗi khi xóa ảnh!");
+    }
+  };
+
+  // ==========================================================
+  // CÁC HÀM GET HẠN MỨC & DANH MỤC
+  // ==========================================================
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`${API_URL}/categories`, {
+        credentials: "include",
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const outflowCategories = Array.isArray(data)
+        ? data.filter((cat: any) => cat.transaction_type === "outflow")
+        : [];
+      setCategories(outflowCategories);
+    } catch (err) {
+      console.error("Lỗi khi tải danh mục:", err);
+    }
+  };
+
+  const fetchBudgets = async () => {
+    try {
+      const now = new Date();
+      const m = now.getMonth() + 1;
+      const y = now.getFullYear();
+
+      const response = await fetch(
+        `${API_URL}/budgets/remaining?month=${m}&year=${y}`,
+        { credentials: "include" }
+      );
+
+      if (!response.ok) return;
+      const data = await response.json();
+      const amountMap: Record<number, number> = {};
+      const allocations = data.allocations || data.data?.allocations || [];
+
+      allocations.forEach((item: any) => {
+        amountMap[item.category_id] = item.amount_limit || 0;
+      });
+      setBudgets(amountMap);
+    } catch (err) {
+      console.error("Lỗi khi tải hạn mức:", err);
+    }
+  };
+
+  // ==========================================================
+  // LƯU TÊN (Dùng PATCH để cập nhật một phần)
+  // ==========================================================
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      triggerToast("⚠️ Tên không được để trống!");
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        method: "PATCH", // <--- ĐỔI TỪ PUT THÀNH PATCH Ở ĐÂY
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          full_name: editName.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        // Nếu vẫn lỗi, thử bắt lỗi xem Backend báo gì để dễ sửa
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Chi tiết lỗi từ Backend:", errorData);
+        throw new Error();
+      }
+
+      setProfile((prev) => ({ ...prev, name: editName.trim() }));
+      triggerToast("✅ Đã cập nhật họ và tên!");
+    } catch (err) {
+      triggerToast("❌ Không thể cập nhật tên!");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+  // ==========================================================
+  // LƯU HẠN MỨC
+  // ==========================================================
+  const handleSaveBudgets = async () => {
+    const totalChanges = Object.keys(changedBudgets).length;
+    if (totalChanges === 0) {
+      triggerToast("⚠️ Bạn chưa thay đổi hạn mức nào!");
+      return;
+    }
+
+    setIsSavingBudgets(true);
+    try {
+      const now = new Date();
+      const formatDate = (d: Date) => {
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${d.getFullYear()}-${mm}-${dd}`;
+      };
+      const todayStr = formatDate(now);
+
+      const budgetPromises = Object.entries(changedBudgets).map(
+        async ([catIdStr, amountLimit]) => {
+          const catId = Number(catIdStr);
+          return fetch(`${API_URL}/budgets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              category_id: catId,
+              amount_limit: amountLimit,
+              start_date: todayStr,
+              end_date: todayStr,
+              period: "monthly",
+              alert_threshold: 80,
+            }),
+          });
+        }
+      );
+
+      await Promise.all(budgetPromises);
+
+      setChangedBudgets({});
+      await fetchBudgets();
+      triggerToast("✅ Đã lưu tất cả hạn mức mới!");
+    } catch (err) {
+      triggerToast("❌ Không thể lưu hạn mức ngân sách!");
+    } finally {
+      setIsSavingBudgets(false);
+    }
+  };
+
+  if (!isMounted) {
+    return (
+      <main className="w-full max-w-md mx-auto min-h-screen bg-[#f9f9fe]"></main>
     );
-    setIsBudgetChanged(true);
-  };
-
-  const handleSaveBudgets = () => {
-    alert("Đã lưu thiết lập hạn mức mới thành công!");
-    setIsBudgetChanged(false);
-  };
-
-  const handleLogout = () => {
-    router.push("/login");
-  };
+  }
 
   return (
-    <main className="flex-grow w-full max-w-md mx-auto px-6 pt-4 pb-28 relative min-h-screen bg-[#f9f9fe]">
-      {/* TopAppBar */}
-      <header className="fixed top-0 w-full max-w-md z-50 bg-[#f9f9fe]/80 backdrop-blur-xl border-b border-[#e2e2e7]/30 flex justify-between items-center px-6 py-4 -ml-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95"
-          >
-            <span className="material-symbols-outlined text-xl">
-              arrow_back
-            </span>
-          </button>
-          <h1 className="font-headline font-bold text-xl tracking-tight text-[#4b5b9a]">
-            Cá nhân
-          </h1>
+    <main className="w-full max-w-md mx-auto min-h-screen bg-[#f9f9fe] pb-32 relative">
+      {toast.show && (
+        <div className="fixed bottom-28 left-5 right-5 z-[100] flex justify-center animate-in slide-in-from-bottom-10 fade-in duration-300">
+          <div className="bg-[#1a1c1f] text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-xs max-w-[90%] text-center">
+            {toast.msg}
+          </div>
         </div>
+      )}
+
+      <header className="sticky top-0 bg-[#f9f9fe]/90 backdrop-blur-md border-b border-[#e2e2e7]/30 flex items-center px-5 py-4 z-40">
+        <button
+          onClick={() => router.back()}
+          className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#e2e2e7] rounded-full transition-all outline-none focus:outline-none"
+        >
+          <span className="material-symbols-outlined text-xl">arrow_back</span>
+        </button>
+        <h1 className="font-headline font-bold text-lg text-[#4b5b9a] ml-2">
+          Cá nhân
+        </h1>
       </header>
 
-      <div className="pt-16 space-y-8">
-        {/* =========================================
-            Section 1: Profile Info Card (Editable)
-            ========================================= */}
-        <section className="relative group mt-6">
-          <div className="absolute -inset-1 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] opacity-10 blur-xl rounded-2xl"></div>
-          <div className="relative bg-white p-8 rounded-[2rem] flex flex-col items-center text-center shadow-sm border border-[#e2e2e7]/50">
-            {/* Avatar */}
-            <div className="relative mb-5">
-              <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8]">
-                <div className="w-full h-full rounded-full border-4 border-white flex items-center justify-center bg-[#e0e2f1] text-[#4b5b9a]">
-                  {/* Hiển thị chữ cái đầu thay vì Image */}
-                  <span className="text-3xl font-black font-headline tracking-tighter">
-                    {getInitials(editProfile.name)}
+      <div className="px-5 pt-6 space-y-6">
+        {/* KHỐI 1: THÔNG TIN CÁ NHÂN & ẢNH ĐẠI DIỆN */}
+        <section className="bg-white p-5 rounded-2xl border border-[#e2e2e7]/50 shadow-sm space-y-4">
+          <div className="flex items-center gap-4">
+            {/* AVATAR CLICK ĐỂ UPLOAD */}
+            <div className="relative group shrink-0">
+              <div
+                className="w-16 h-16 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] shadow-sm cursor-pointer transition-transform active:scale-95"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isUploadingAvt ? (
+                  <span className="material-symbols-outlined text-2xl text-[#4b5b9a] animate-spin">
+                    autorenew
                   </span>
-                </div>
-              </div>
-
-              {/* Nút photo_camera đã bị xóa để không cho thay đổi avatar */}
-            </div>
-
-            {/* Thông tin cố định */}
-            <p className="text-[#616470] font-medium text-xs mb-3">
-              {profile.email}
-            </p>
-            <div className="flex gap-2 mb-6">
-              <span className="px-4 py-1.5 bg-[#e0e2f1] text-[#616470] text-[10px] font-bold rounded-full uppercase tracking-wider">
-                {profile.plan}
-              </span>
-              <span className="px-4 py-1.5 bg-[#dde1ff] text-[#283775] text-[10px] font-bold rounded-full uppercase tracking-wider">
-                {profile.status}
-              </span>
-            </div>
-
-            {/* Form chỉnh sửa Tên và ID */}
-            <div className="w-full space-y-4 text-left border-t border-[#f3f3f8] pt-6">
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-[#767681] ml-1 mb-1 block">
-                  Tên hiển thị
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editProfile.name}
-                    onChange={(e) =>
-                      setEditProfile({ ...editProfile, name: e.target.value })
-                    }
-                    className="w-full bg-[#f3f3f8] border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold text-[#1a1c1f] focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all"
+                ) : avtUrl ? (
+                  <img
+                    src={avtUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
                   />
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-lg">
-                    person
+                ) : (
+                  <span className="text-xl font-black font-headline text-[#4b5b9a]">
+                    {getInitials(editName)}
+                  </span>
+                )}
+
+                {/* Lớp mờ báo hiệu có thể click sửa khi hover */}
+                <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center transition-all">
+                  <span className="material-symbols-outlined text-white text-lg drop-shadow-md">
+                    edit
                   </span>
                 </div>
               </div>
 
-              <div>
-                <div className="flex justify-between items-end mb-1 ml-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-[#767681]">
-                    ID Người dùng
-                  </label>
-                  <span
-                    className={`text-[9px] font-bold ${
-                      profile.hasChangedId ? "text-[#ba1a1a]" : "text-[#059669]"
-                    }`}
-                  >
-                    {profile.hasChangedId
-                      ? "Đã khóa đổi ID"
-                      : "Chỉ được đổi 1 lần"}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={editProfile.userId}
-                    onChange={(e) =>
-                      setEditProfile({ ...editProfile, userId: e.target.value })
-                    }
-                    disabled={profile.hasChangedId}
-                    className={`w-full border-none rounded-2xl py-3.5 pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-[#4b5b9a]/30 transition-all ${
-                      profile.hasChangedId
-                        ? "bg-[#e2e2e7]/50 text-[#767681] opacity-70"
-                        : "bg-[#f3f3f8] text-[#1a1c1f]"
-                    }`}
-                  />
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#c6c5d1] text-lg">
-                    badge
-                  </span>
-                </div>
-              </div>
-
-              {/* Nút lưu hồ sơ (Chỉ hiện khi có thay đổi) */}
-              {isProfileChanged && (
+              {/* NÚT XÓA ẢNH (Chỉ hiện khi có ảnh) */}
+              {avtUrl && !isUploadingAvt && (
                 <button
-                  onClick={handleSaveProfile}
-                  className="w-full mt-2 py-3.5 bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white rounded-2xl font-bold text-sm shadow-lg shadow-[#4b5b9a]/20 active:scale-95 transition-all animate-in slide-in-from-bottom-2"
+                  onClick={handleDeleteAvatar}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-white border border-[#e2e2e7] text-[#ba1a1a] rounded-full flex items-center justify-center shadow-sm hover:bg-[#ffdad6] active:scale-90 transition-all outline-none"
+                  title="Xóa ảnh đại diện"
                 >
-                  Lưu thông tin
+                  <span className="material-symbols-outlined text-[12px]">
+                    close
+                  </span>
                 </button>
               )}
+
+              {/* Input file ẩn */}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleUploadAvatar}
+              />
             </div>
+
+            <div className="min-w-0">
+              <h4 className="font-bold text-sm text-[#1a1c1f] truncate">
+                {profile.name || "Người dùng"}
+              </h4>
+              <p className="text-[11px] text-[#767681] truncate mt-0.5">
+                {profile.email}
+              </p>
+              <p className="text-[11px] text-[#767681] truncate">
+                {profile.number || "Chưa có SĐT"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <input
+              type="text"
+              placeholder="Họ và tên"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="flex-grow bg-[#f3f3f8] border-none rounded-xl py-3 px-4 text-sm font-bold text-[#1a1c1f] outline-none"
+            />
+            <button
+              onClick={handleSaveProfile}
+              disabled={isSavingProfile}
+              className={`px-5 rounded-xl font-bold text-xs transition-all flex items-center justify-center outline-none shrink-0 ${
+                isSavingProfile
+                  ? "bg-[#c6c5d1] text-white cursor-not-allowed"
+                  : "bg-[#4b5b9a] text-white active:scale-95"
+              }`}
+            >
+              {isSavingProfile ? (
+                <span className="material-symbols-outlined animate-spin text-sm">
+                  autorenew
+                </span>
+              ) : (
+                "Lưu"
+              )}
+            </button>
           </div>
         </section>
 
-        {/* =========================================
-            Section 2: Budget Limits (Editable)
-            ========================================= */}
+        {/* KHỐI 2: THIẾT LẬP HẠN MỨC */}
         <section className="space-y-4">
-          <div className="flex items-end justify-between px-1">
-            <div>
-              <h3 className="font-headline font-bold text-xl tracking-tight text-[#1a1c1f]">
-                Thiết lập hạn mức
-              </h3>
-              <p className="text-[#616470] text-xs mt-1">
-                Các hạng mục tự động & tự thêm
-              </p>
-            </div>
-            {isBudgetChanged && (
-              <button
-                onClick={handleSaveBudgets}
-                className="text-[10px] font-black uppercase tracking-widest text-[#4b5b9a] bg-[#dde1ff] px-4 py-2 rounded-xl animate-pulse"
-              >
-                Lưu hạn mức
-              </button>
+          <div className="flex justify-between items-center">
+            <h4 className="font-headline font-bold text-lg text-[#1a1c1f]">
+              Thiết lập hạn mức
+            </h4>
+            {Object.keys(changedBudgets).length > 0 && (
+              <span className="text-[10px] font-bold bg-[#ffdad6] text-[#ba1a1a] px-2 py-0.5 rounded-full animate-pulse">
+                Đang sửa {Object.keys(changedBudgets).length} mục
+              </span>
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            {budgets.map((budget) => {
-              const percentage =
-                Math.min(
-                  Math.round((budget.spent / budget.limit) * 100),
-                  100
-                ) || 0;
-              const isOverWarning = percentage >= 80;
-
-              return (
-                <div
-                  key={budget.id}
-                  className="bg-white border border-[#e2e2e7]/50 p-5 rounded-[2rem] space-y-4 shadow-sm hover:border-[#dde1ff] transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-[#f3f3f8] flex items-center justify-center text-[#4b5b9a]">
-                        <span className="material-symbols-outlined text-2xl">
-                          {budget.icon}
-                        </span>
-                      </div>
-                      <div>
-                        <h4 className="font-headline font-bold text-[#1a1c1f] text-sm">
-                          {budget.name}
-                        </h4>
-                        <p className="text-[10px] text-[#616470] font-medium uppercase tracking-widest mt-0.5">
-                          Đã tiêu {formatCurrency(budget.spent)}đ
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={`font-bold font-headline text-lg ${
-                        isOverWarning ? "text-[#ba1a1a]" : "text-[#4b5b9a]"
-                      }`}
-                    >
-                      {percentage}%
+          <div className="space-y-2">
+            {categories.map((cat) => (
+              <div
+                key={cat.category_id}
+                className="bg-white p-3.5 rounded-xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#f3f3f8] flex items-center justify-center text-[#4b5b9a]">
+                    <span className="material-symbols-outlined text-lg">
+                      {cat.icon}
                     </span>
                   </div>
-
-                  <div className="space-y-3">
-                    <div className="w-full h-2 bg-[#f3f3f8] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-1000 ${
-                          isOverWarning ? "bg-[#ba1a1a]" : budget.color
-                        }`}
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-
-                    {/* Chỉnh sửa hạn mức (Input) */}
-                    <div className="flex justify-between items-center bg-[#f9f9fe] p-3 rounded-2xl border border-[#e2e2e7]/40">
-                      <span className="text-[11px] font-bold text-[#616470] uppercase tracking-wider">
-                        Giới hạn tháng
-                      </span>
-                      <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl border border-[#e2e2e7] focus-within:border-[#4b5b9a] transition-all shadow-sm">
-                        <input
-                          type="text"
-                          value={formatCurrency(budget.limit)}
-                          onChange={(e) =>
-                            handleBudgetChange(budget.id, e.target.value)
-                          }
-                          className="w-24 text-right bg-transparent border-none focus:ring-0 font-headline font-bold p-0 text-[#1a1c1f] text-sm"
-                        />
-                        <span className="text-sm font-bold text-[#767681]">
-                          đ
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <span className="font-bold text-xs text-[#1a1c1f] max-w-[120px] truncate">
+                    {cat.category_name}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </section>
 
-        {/* =========================================
-            Section 3: Alerts Settings 
-            ========================================= */}
-        <section className="bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white p-8 rounded-[2rem] shadow-xl shadow-[#4b5b9a]/20">
-          <div className="flex items-center gap-3 mb-6">
-            <span className="material-symbols-outlined text-3xl">
-              notifications_active
-            </span>
-            <h3 className="font-headline font-bold text-xl">
-              Cài đặt thông báo
-            </h3>
-          </div>
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-bold text-sm">Cảnh báo hạn mức</p>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Thông báo khi chi tiêu đạt 80%
-                </p>
+                <div className="flex items-center gap-1 bg-[#f9f9fe] px-2 py-1 rounded-lg border border-[#e2e2e7] focus-within:border-[#4b5b9a] transition-colors">
+                  <input
+                    type="text"
+                    placeholder="0"
+                    value={
+                      budgets[cat.category_id]
+                        ? new Intl.NumberFormat("vi-VN").format(
+                            budgets[cat.category_id]
+                          )
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const val =
+                        parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
+                      setBudgets((prev) => ({
+                        ...prev,
+                        [cat.category_id]: val,
+                      }));
+                      setChangedBudgets((prev) => ({
+                        ...prev,
+                        [cat.category_id]: val,
+                      }));
+                    }}
+                    className="w-24 text-right bg-transparent border-none focus:outline-none font-bold text-[#1a1c1f] text-xs outline-none"
+                  />
+                  <span className="text-[10px] font-bold text-[#767681]">
+                    đ
+                  </span>
+                </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={alertLimit}
-                  onChange={() => setAlertLimit(!alertLimit)}
-                />
-                <div className="w-12 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#94a3e8]"></div>
-              </label>
-            </div>
-
-            <div className="h-px bg-white/20"></div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-bold text-sm">Báo cáo hàng tuần</p>
-                <p className="text-[11px] opacity-80 mt-0.5">
-                  Tóm tắt chi tiêu vào sáng Thứ Hai
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={weeklyReport}
-                  onChange={() => setWeeklyReport(!weeklyReport)}
-                />
-                <div className="w-12 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#94a3e8]"></div>
-              </label>
-            </div>
+            ))}
           </div>
-        </section>
 
-        {/* =========================================
-            Logout / Footer Area 
-            ========================================= */}
-        <div className="pt-2 flex flex-col items-center gap-4">
           <button
-            onClick={handleLogout}
-            className="w-full py-4 bg-[#fff0ee] hover:bg-[#ffdad6] text-[#ba1a1a] font-bold rounded-2xl flex items-center justify-center gap-2 transition-colors active:scale-95 shadow-sm"
+            onClick={handleSaveBudgets}
+            disabled={
+              isSavingBudgets || Object.keys(changedBudgets).length === 0
+            }
+            className={`w-full py-3.5 rounded-xl font-headline font-black text-xs uppercase tracking-wider transition-all active:scale-[0.99] shadow-md outline-none ${
+              Object.keys(changedBudgets).length === 0
+                ? "bg-[#ededf2] text-[#767681] border border-[#e2e2e7]/50 shadow-none cursor-not-allowed"
+                : isSavingBudgets
+                ? "bg-[#c6c5d1] text-white cursor-not-allowed shadow-none"
+                : "bg-gradient-to-r from-[#4b5b9a] to-[#94a3e8] text-white shadow-[#4b5b9a]/20"
+            }`}
           >
-            <span className="material-symbols-outlined">logout</span>
-            Đăng xuất
+            {isSavingBudgets ? (
+              <div className="flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-sm">
+                  autorenew
+                </span>
+                Đang lưu hạn mức...
+              </div>
+            ) : (
+              "Xác nhận lưu hạn mức"
+            )}
           </button>
-          <p className="text-[10px] text-[#767681] font-black tracking-widest uppercase mt-4">
-            Momentum v2.4.0 • Made for Duyên
-          </p>
-        </div>
+        </section>
+
+        {/* ĐĂNG XUẤT */}
+        <button
+          onClick={() => router.push("/login")}
+          className="w-full py-4 bg-[#fff0ee] text-[#ba1a1a] font-bold text-xs rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all outline-none"
+        >
+          <span className="material-symbols-outlined text-lg">logout</span>
+          Đăng xuất
+        </button>
       </div>
     </main>
   );

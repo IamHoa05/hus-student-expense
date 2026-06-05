@@ -1,228 +1,165 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// =======================================================================
-// 1. Định nghĩa kiểu dữ liệu (Giúp TypeScript không báo lỗi đỏ)
-// =======================================================================
-interface NotificationItem {
-  id: string;
-  type: string;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface Notification {
+  notification_id: number;
   title: string;
-  message: string;
-  time: string;
-  isRead: boolean;
-  icon: string;
-  iconColor: string;
-  bgColor: string;
-  groupId?: string; // Tùy chọn (chỉ có ở thông báo mời vào nhóm)
+  body: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
+  ref_id: number;
 }
 
-// =======================================================================
-// 2. MOCK DATA: Danh sách thông báo
-// =======================================================================
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "n5",
-    type: "group_invite",
-    title: "Lời mời tham gia nhóm",
-    message: "Lê Anh Quân (u789) đã mời bạn tham gia nhóm 'Nhóm dự án AI'.",
-    time: "Vừa xong",
-    isRead: false,
-    icon: "group_add",
-    iconColor: "text-[#10b981]",
-    bgColor: "bg-[#d1f4e0]",
-    groupId: "g3", // ID của nhóm để gọi API
-  },
-  {
-    id: "n1",
-    type: "alert",
-    title: "Cảnh báo hạn mức Ăn uống!",
-    message:
-      "Bạn đã tiêu 4.200.000đ (84%) hạn mức tháng này. Chỉ còn 800.000đ cho 6 ngày tới.",
-    time: "2 giờ trước",
-    isRead: false,
-    icon: "warning",
-    iconColor: "text-[#ba1a1a]",
-    bgColor: "bg-[#ffdad6]/40",
-  },
-  {
-    id: "n2",
-    type: "warning",
-    title: "Mua sắm sắp vượt giới hạn",
-    message:
-      "Hạng mục Mua sắm đã đạt 90% (1.800.000đ/2.000.000đ). Hãy cân nhắc trước khi chi tiêu thêm nhé!",
-    time: "Hôm qua",
-    isRead: false,
-    icon: "shopping_bag",
-    iconColor: "text-[#755b00]",
-    bgColor: "bg-[#ffdf90]/30",
-  },
-  {
-    id: "n3",
-    type: "info",
-    title: "Bắt đầu chu kỳ tháng mới 🚀",
-    message:
-      "Hạn mức của bạn đã được làm mới. Chúc bạn một tháng quản lý tài chính hiệu quả!",
-    time: "01/10/2026",
-    isRead: true,
-    icon: "calendar_month",
-    iconColor: "text-[#4b5b9a]",
-    bgColor: "bg-[#dde1ff]/30",
-  },
-  {
-    id: "n4",
-    type: "room",
-    title: "Nhắc nhở quỹ phòng",
-    message:
-      "Hà Vy vừa tạo yêu cầu chia hóa đơn 'Tiền điện tháng 9'. Số tiền của bạn: 416.666đ.",
-    time: "28/09/2026",
-    isRead: true,
-    icon: "receipt_long",
-    iconColor: "text-[#4b5b9a]",
-    bgColor: "bg-[#f3f3f8]",
-  },
-];
-
-// =======================================================================
-// 3. COMPONENT CHÍNH
-// =======================================================================
 export default function NotificationsPage() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<NotificationItem[]>(
-    INITIAL_NOTIFICATIONS
-  );
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Đánh dấu tất cả là đã đọc
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, isRead: true })));
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API_URL}/notifications?page=1&limit=20`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setNotifications(json.data || []);
+      }
+    } catch (err) {
+      console.error("Lỗi tải thông báo:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Logic: Chấp nhận lời mời nhóm
-  const handleAcceptInvite = (notificationId: string, groupId?: string) => {
-    if (!groupId) return; // Bảo vệ an toàn nếu thiếu ID nhóm
-    alert(`Bạn đã tham gia nhóm thành công! (Mã nhóm: ${groupId})`);
-    // Xóa thông báo lời mời đi sau khi thao tác
-    setNotifications(notifications.filter((n) => n.id !== notificationId));
+  const handleReadAll = async () => {
+    try {
+      await fetch(`${API_URL}/notifications/read-all`, {
+        method: "PUT", // Hoặc POST tùy backend
+        credentials: "include",
+      });
+      // Đánh dấu toàn bộ mảng là đã đọc trên UI
+      setNotifications((prev) =>
+        prev.map((noti) => ({ ...noti, is_read: true }))
+      );
+    } catch (err) {
+      console.error("Lỗi read-all:", err);
+    }
   };
 
-  // Logic: Từ chối lời mời nhóm
-  const handleDeclineInvite = (notificationId: string) => {
-    // Xóa thông báo lời mời đi
-    setNotifications(notifications.filter((n) => n.id !== notificationId));
+  const handleReadSingle = async (id: number, isRead: boolean) => {
+    if (isRead) return; // Đã đọc rồi thì không gọi API nữa
+    try {
+      await fetch(`${API_URL}/notifications/${id}/read`, {
+        method: "PUT", // Hoặc POST tùy backend
+        credentials: "include",
+      });
+      // Đánh dấu item này là đã đọc trên UI
+      setNotifications((prev) =>
+        prev.map((noti) =>
+          noti.notification_id === id ? { ...noti, is_read: true } : noti
+        )
+      );
+    } catch (err) {
+      console.error("Lỗi read-single:", err);
+    }
   };
 
-  // Đếm số thông báo chưa đọc
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const formatTime = (dateString: string) => {
+    const d = new Date(dateString);
+    return `${d.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })} • ${d.toLocaleDateString("vi-VN")}`;
+  };
 
   return (
-    <main className="flex-grow w-full max-w-md mx-auto bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-screen pb-32 relative">
-      {/* HEADER CỐ ĐỊNH TẠI TOP */}
-      <header className="fixed top-0 w-full max-w-md z-50 bg-[#f9f9fe]/90 backdrop-blur-xl border-b border-[#e2e2e7]/30">
-        <div className="flex justify-between items-center px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.back()}
-              className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#f3f3f8] rounded-full transition-colors active:scale-95 flex items-center justify-center"
-            >
-              <span className="material-symbols-outlined text-xl">
-                arrow_back
-              </span>
-            </button>
-            <h1 className="font-headline font-bold text-xl tracking-tight text-[#4b5b9a]">
-              Thông báo
-            </h1>
-          </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={markAllAsRead}
-              className="text-xs font-bold text-[#4b5b9a] bg-[#dde1ff] px-3 py-1.5 rounded-full hover:bg-[#c4caff] transition-colors active:scale-95"
-            >
-              Đã đọc tất cả
-            </button>
-          )}
+    <main className="w-full max-w-md mx-auto min-h-screen bg-[#f9f9fe] pb-24 relative">
+      <header className="sticky top-0 bg-[#f9f9fe]/90 backdrop-blur-md border-b border-[#e2e2e7]/30 flex items-center justify-between px-5 py-4 z-40">
+        <div className="flex items-center">
+          <button
+            onClick={() => router.back()}
+            className="p-2 -ml-2 text-[#4b5b9a] hover:bg-[#e2e2e7] rounded-full transition-all outline-none"
+          >
+            <span className="material-symbols-outlined text-xl">
+              arrow_back
+            </span>
+          </button>
+          <h1 className="font-headline font-bold text-lg text-[#4b5b9a] ml-2">
+            Thông báo
+          </h1>
         </div>
+
+        <button
+          onClick={handleReadAll}
+          className="text-[10px] font-bold text-[#4b5b9a] underline outline-none"
+        >
+          Đọc tất cả
+        </button>
       </header>
 
-      {/* VÙNG NỘI DUNG CHÍNH */}
-      <div className="pt-24 px-6 space-y-4">
-        {/* Tiêu đề & Couter Mới nhất */}
-        <div className="flex items-center gap-2 mb-2">
-          <h2 className="font-headline font-bold text-lg text-[#1a1c1f]">
-            Mới nhất
-          </h2>
-          {unreadCount > 0 && (
-            <span className="bg-[#ba1a1a] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-              {unreadCount}
-            </span>
-          )}
-        </div>
-
-        {/* Danh sách thông báo */}
-        <div className="space-y-3">
-          {notifications.map((note) => (
-            <div
-              key={note.id}
-              className={`p-4 rounded-2xl border transition-all ${
-                note.isRead
-                  ? "bg-white border-[#e2e2e7]/50"
-                  : "bg-white border-[#94a3e8]/40 shadow-sm"
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${note.bgColor}`}
-                >
-                  <span
-                    className={`material-symbols-outlined ${note.iconColor}`}
-                  >
-                    {note.icon}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-sm text-[#1a1c1f]">
-                    {note.title}
-                  </h3>
-                  <p className="text-xs text-[#454650] mt-1 leading-relaxed">
-                    {note.message}
-                  </p>
-
-                  {/* CÁC NÚT TƯƠNG TÁC CHO LỜI MỜI NHÓM */}
-                  {note.type === "group_invite" && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-[#e2e2e7]/50">
-                      <button
-                        onClick={() =>
-                          handleAcceptInvite(note.id, note.groupId)
-                        }
-                        className="flex-1 bg-[#10b981] text-white text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#059669] active:scale-95 transition-all shadow-sm shadow-[#10b981]/20"
-                      >
-                        Chấp nhận
-                      </button>
-                      <button
-                        onClick={() => handleDeclineInvite(note.id)}
-                        className="flex-1 bg-[#f3f3f8] text-[#616470] text-[11px] font-bold py-2.5 rounded-xl hover:bg-[#e2e2e7] hover:text-[#ba1a1a] active:scale-95 transition-all"
-                      >
-                        Từ chối
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* TRẠNG THÁI RỖNG (Khi không có thông báo nào) */}
-        {notifications.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-40 opacity-50 text-center animate-in fade-in duration-500">
-            <span className="material-symbols-outlined text-6xl text-[#616470] mb-4">
+      <div className="px-5 pt-4 space-y-3">
+        {loading ? (
+          <div className="text-center text-xs text-[#767681] py-10">
+            Đang tải...
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center text-[#767681] py-10">
+            <span className="material-symbols-outlined text-4xl mb-2 text-[#dde1ff]">
               notifications_off
             </span>
-            <p className="font-headline font-semibold text-[#454650]">
-              Không có thông báo nào!
-            </p>
+            <p className="text-xs font-medium">Bạn chưa có thông báo nào.</p>
           </div>
+        ) : (
+          notifications.map((noti) => (
+            <div
+              key={noti.notification_id}
+              onClick={() =>
+                handleReadSingle(noti.notification_id, noti.is_read)
+              }
+              className={`p-4 rounded-xl border flex gap-3 transition-all cursor-pointer ${
+                noti.is_read
+                  ? "bg-[#f3f3f8] border-transparent opacity-70"
+                  : "bg-white border-[#e2e2e7]/50 shadow-sm"
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-[#dde1ff] flex items-center justify-center text-[#4b5b9a] shrink-0">
+                <span className="material-symbols-outlined text-xl">
+                  {noti.type === "transaction" ? "payments" : "notifications"}
+                </span>
+              </div>
+              <div className="flex-grow min-w-0">
+                <div className="flex justify-between items-start mb-0.5">
+                  <h4
+                    className={`text-xs truncate ${
+                      noti.is_read
+                        ? "font-bold text-[#454650]"
+                        : "font-black text-[#1a1c1f]"
+                    }`}
+                  >
+                    {noti.title}
+                  </h4>
+                  {!noti.is_read && (
+                    <span className="w-2 h-2 rounded-full bg-[#ba1a1a] mt-1 shrink-0"></span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#454650] leading-relaxed">
+                  {noti.body}
+                </p>
+                <p className="text-[9px] text-[#767681] mt-2 font-medium">
+                  {formatTime(noti.created_at)}
+                </p>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </main>

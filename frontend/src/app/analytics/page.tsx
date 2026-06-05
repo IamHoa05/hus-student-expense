@@ -4,370 +4,619 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import TopBar from "@/components/layout/TopBar";
 import Link from "next/link";
 
-// =======================================================================
-// 1. DỮ LIỆU GIẢ LẬP (MOCK DATA)
-// =======================================================================
-const CATEGORIES_DATA = [
-  {
-    id: "cat_food",
-    name: "Ăn uống & Cà phê",
-    amount: 5602000,
-    txCount: 42,
-    icon: "restaurant",
-    color: "#4b5b9a",
-    bgClass: "bg-[#4b5b9a]/10",
-  },
-  {
-    id: "cat_edu",
-    name: "Học phí & Khóa học",
-    amount: 3112000,
-    txCount: 3,
-    icon: "school",
-    color: "#c5a344",
-    bgClass: "bg-[#c5a344]/10",
-  },
-  {
-    id: "cat_transport",
-    name: "Di chuyển",
-    amount: 1230000,
-    txCount: 15,
-    icon: "directions_bus",
-    color: "#c3c6d4",
-    bgClass: "bg-[#c3c6d4]/20",
-  },
-  {
-    id: "cat_shop",
-    name: "Mua sắm",
-    amount: 2500000,
-    txCount: 8,
-    icon: "shopping_bag",
-    color: "#94a3e8",
-    bgClass: "bg-[#94a3e8]/10",
-  },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const TREND_DATA = {
-  week: [
-    { label: "T2", amount: 120000 },
-    { label: "T3", amount: 450000 },
-    { label: "T4", amount: 300000 },
-    { label: "T5", amount: 800000 },
-    { label: "T6", amount: 200000 },
-    { label: "T7", amount: 1200000 },
-    { label: "CN", amount: 950000 },
-  ],
-  month: [
-    { label: "T1", amount: 4200000 },
-    { label: "T2", amount: 3800000 },
-    { label: "T3", amount: 5100000 },
-    { label: "T4", amount: 4500000 },
-    { label: "T5", amount: 3200000 },
-    { label: "T6", amount: 2800000 },
-    { label: "T7", amount: 6100000 },
-    { label: "T8", amount: 4900000 },
-    { label: "T9", amount: 7200000 },
-    { label: "T10", amount: 8500000 },
-    { label: "T11", amount: 9200000 },
-    { label: "T12", amount: 12450000 },
-  ],
-  quarter: [
-    { label: "Q1", amount: 15000000 },
-    { label: "Q2", amount: 18500000 },
-    { label: "Q3", amount: 12000000 },
-    { label: "Q4", amount: 24000000 },
-  ],
-  year: [
-    { label: "2022", amount: 110000000 },
-    { label: "2023", amount: 145000000 },
-    { label: "2024", amount: 168000000 },
-    { label: "2025", amount: 192000000 },
-    { label: "2026", amount: 45000000 },
-  ],
-};
+// =======================================================================
+// BẢNG MÀU CÓ SẴN (Cho Biểu đồ tròn)
+// =======================================================================
+const COLOR_PALETTE = [
+  "#4b5b9a",
+  "#94a3e8",
+  "#ba1a1a",
+  "#c5a344",
+  "#10b981",
+  "#f59e0b",
+  "#ec4899",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ef4444",
+  "#84cc16",
+  "#f97316",
+];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("vi-VN").format(amount) + "đ";
 };
 
 // =======================================================================
-// 2. COMPONENT CHÍNH
+// COMPONENT CHÍNH
 // =======================================================================
 export default function AnalyticsPage() {
-  const [timeFilter, setTimeFilter] =
-    useState<keyof typeof TREND_DATA>("month");
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // States chọn thời gian
+  const [timeFilter, setTimeFilter] = useState<"day" | "week" | "month">("day");
+  const [selectedPeriodLabel, setSelectedPeriodLabel] = useState<string>("");
+
+  // States API
+  const [trendTimeline, setTrendTimeline] = useState<any[]>([]);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [loadingChart, setLoadingChart] = useState(true);
+
+  // Tooltip & Refs
+  const [hoveredSliceId, setHoveredSliceId] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pieRef = useRef<HTMLDivElement>(null);
+  const lastBarRef = useRef<HTMLDivElement>(null);
 
-  const currentTrend = TREND_DATA[timeFilter];
-
-  // Tự động chọn cột cuối cùng và cuộn sang phải khi đổi filter
   useEffect(() => {
-    const lastIndex = currentTrend.length - 1;
-    setSelectedIndex(lastIndex);
+    setIsMounted(true);
+  }, []);
 
-    if (scrollRef.current) {
-      // Timeout nhẹ để chờ DOM render xong các cột mới
-      setTimeout(() => {
-        scrollRef.current!.scrollLeft = scrollRef.current!.scrollWidth;
-      }, 100);
-    }
-  }, [timeFilter, currentTrend]);
+  // 1. FETCH LỊCH SỬ GIAO DỊCH (Gọi 1 lần để dùng làm data cho Biểu đồ Tròn)
+  useEffect(() => {
+    const fetchAllTx = async () => {
+      try {
+        const res = await fetch(`${API_URL}/transactions`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const txPayload = await res.json();
 
-  // Tính toán dữ liệu thực
-  const currentTotal = useMemo(
-    () => CATEGORIES_DATA.reduce((sum, c) => sum + c.amount, 0),
-    []
-  );
-  const maxInTrend = Math.max(...currentTrend.map((d) => d.amount));
-  const sortedTrend = [...currentTrend].sort((a, b) => a.amount - b.amount);
-  const minItem = sortedTrend[0];
-  const maxItem = sortedTrend[sortedTrend.length - 1];
-  const unitLabel =
-    timeFilter === "week"
-      ? "Thứ"
-      : timeFilter === "month"
-      ? "Tháng"
-      : timeFilter === "quarter"
-      ? "Quý"
-      : "Năm";
+        let txGroups = [];
+        if (txPayload?.data?.data && Array.isArray(txPayload.data.data)) {
+          txGroups = txPayload.data.data;
+        } else if (txPayload?.data && Array.isArray(txPayload.data)) {
+          txGroups = txPayload.data;
+        } else if (Array.isArray(txPayload)) {
+          txGroups = txPayload;
+        }
 
-  // Tính toán cho Pie Chart đặc
-  const pieSlices = useMemo(() => {
-    let cumulativePercent = 0;
-    return CATEGORIES_DATA.map((cat) => {
-      const percent = (cat.amount / currentTotal) * 100;
-      const startPercent = cumulativePercent;
-      cumulativePercent += percent;
-      return { ...cat, startPercent, percent };
+        const flatTx = txGroups.flatMap(
+          (group: any) => group.transactions || group
+        );
+
+        // Map ra format chuẩn có Date object để dễ filter
+        const parsedTx = flatTx.map((t: any) => {
+          const d = new Date(
+            t.transaction_date || t.created_at || t.createdAt || Date.now()
+          );
+          return {
+            categoryId: String(t.category_id || "other"),
+            categoryName: t.category_name || "Khác",
+            icon: t.icon || "category",
+            amount: Number(t.amount ?? t.total_amount ?? 0),
+            type: t.transaction_type === "inflow" ? "income" : "expense",
+            dateObj: d,
+            // Format ra string "03/06" hoặc "T6" để so sánh với label của Cột
+            dayStr: `${d.getDate().toString().padStart(2, "0")}/${(
+              d.getMonth() + 1
+            )
+              .toString()
+              .padStart(2, "0")}`,
+            monthStr: `T${d.getMonth() + 1}`,
+          };
+        });
+
+        setAllTransactions(parsedTx);
+      } catch (err) {
+        console.error("Lỗi fetch transactions:", err);
+      }
+    };
+    fetchAllTx();
+  }, []);
+
+  // 2. FETCH DỮ LIỆU BIỂU ĐỒ CỘT (Mỗi khi đổi Ngày/Tuần/Tháng)
+  useEffect(() => {
+    const fetchTrend = async () => {
+      setLoadingChart(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/stats/trend?period_type=${timeFilter}`,
+          {
+            credentials: "include",
+          }
+        );
+        if (res.ok) {
+          const trendJson = await res.json();
+          const chartArr =
+            trendJson.chart_data || trendJson.data?.chart_data || [];
+
+          const mappedChart = chartArr.map((d: any) => ({
+            label: d.label,
+            amount: d.total_amount || 0,
+            value: d.label, // Dùng chính label làm value ("03/06", "T6", "25/05-31/05")
+          }));
+
+          setTrendTimeline(mappedChart);
+
+          // Tự động chọn cột cuối cùng
+          if (mappedChart.length > 0) {
+            setSelectedPeriodLabel(mappedChart[mappedChart.length - 1].label);
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi fetch trend:", err);
+      } finally {
+        setLoadingChart(false);
+      }
+    };
+
+    fetchTrend();
+  }, [timeFilter]);
+
+  // Cuộn biểu đồ về cột mới nhất
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (lastBarRef.current) {
+        lastBarRef.current.scrollIntoView({
+          behavior: "auto",
+          block: "nearest",
+          inline: "end",
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [trendTimeline]);
+
+  // =======================================================================
+  // LOGIC TÍNH TOÁN DỮ LIỆU CHO CỘT ĐANG CHỌN (Tạo Biểu đồ tròn)
+  // =======================================================================
+  const selectedCategoriesData = useMemo(() => {
+    if (!selectedPeriodLabel || allTransactions.length === 0) return [];
+
+    // B1: Lọc giao dịch tương ứng với cột thời gian đang chọn
+    const filteredTx = allTransactions.filter((tx) => {
+      // Chỉ tính khoản Chi (expense) cho biểu đồ tròn
+      if (tx.type !== "expense") return false;
+
+      if (timeFilter === "day") {
+        return tx.dayStr === selectedPeriodLabel; // Khớp "03/06"
+      } else if (timeFilter === "month") {
+        return tx.monthStr === selectedPeriodLabel; // Khớp "T6"
+      } else if (timeFilter === "week") {
+        // Tuần có format "25/05-31/05"
+        const parts = selectedPeriodLabel.split("-");
+        if (parts.length === 2) {
+          const [startStr, endStr] = parts;
+          const y = new Date().getFullYear();
+
+          const [sD, sM] = startStr.split("/");
+          const startDate = new Date(
+            y,
+            parseInt(sM) - 1,
+            parseInt(sD),
+            0,
+            0,
+            0
+          );
+
+          const [eD, eM] = endStr.split("/");
+          const endDate = new Date(
+            y,
+            parseInt(eM) - 1,
+            parseInt(eD),
+            23,
+            59,
+            59
+          );
+
+          return tx.dateObj >= startDate && tx.dateObj <= endDate;
+        }
+        return false;
+      }
+      return true;
     });
-  }, [currentTotal]);
+
+    // B2: Gom nhóm theo Danh mục
+    const categoryMap = new Map();
+    filteredTx.forEach((tx) => {
+      const existing = categoryMap.get(tx.categoryId) || {
+        id: tx.categoryId,
+        name: tx.categoryName,
+        icon: tx.icon,
+        amount: 0,
+        txCount: 0,
+      };
+      existing.amount += tx.amount;
+      existing.txCount += 1;
+      categoryMap.set(tx.categoryId, existing);
+    });
+
+    // B3: Sắp xếp giảm dần và gán màu
+    const sortedCats = Array.from(categoryMap.values()).sort(
+      (a, b) => b.amount - a.amount
+    );
+    return sortedCats.map((cat, index) => ({
+      ...cat,
+      color: COLOR_PALETTE[index % COLOR_PALETTE.length],
+    }));
+  }, [selectedPeriodLabel, timeFilter, allTransactions]);
+
+  const selectedTotalAmount = useMemo(() => {
+    return selectedCategoriesData.reduce((sum, c) => sum + (c.amount || 0), 0);
+  }, [selectedCategoriesData]);
+
+  const maxInTrend = Math.max(...trendTimeline.map((d) => d.amount || 0), 1);
+  const sortedTrend = [...trendTimeline].sort(
+    (a, b) => (a.amount || 0) - (b.amount || 0)
+  );
+  const minItem = sortedTrend.length > 0 ? sortedTrend[0] : null;
+  const maxItem =
+    sortedTrend.length > 0 ? sortedTrend[sortedTrend.length - 1] : null;
+
+  // =======================================================================
+  // VẼ BIỂU ĐỒ TRÒN
+  // =======================================================================
+  const pieSlices = useMemo(() => {
+    if (selectedTotalAmount === 0) return [];
+    let cumulativePercent = 0;
+
+    return selectedCategoriesData.map((cat) => {
+      const percent = ((cat.amount || 0) / selectedTotalAmount) * 100;
+      const startAngle = (cumulativePercent / 100) * 360;
+      const endAngle = ((cumulativePercent + percent) / 100) * 360;
+      cumulativePercent += percent;
+
+      return {
+        ...cat,
+        percent,
+        startAngle,
+        endAngle,
+      };
+    });
+  }, [selectedCategoriesData, selectedTotalAmount]);
+
+  const handlePieMouseMove = (e: React.MouseEvent, sliceId: string) => {
+    if (pieRef.current) {
+      const rect = pieRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+    }
+    setHoveredSliceId(sliceId);
+  };
+
+  const hoveredSlice = pieSlices.find((s) => s.id === hoveredSliceId);
+
+  const contextLabelText =
+    timeFilter === "day" ? "Ngày" : timeFilter === "week" ? "Tuần" : "Tháng";
+
+  if (!isMounted) return <main className="bg-[#f9f9fe] min-h-screen"></main>;
 
   return (
-    <main className="flex-grow w-full max-w-md mx-auto px-6 pt-4 pb-32 relative min-h-screen bg-[#f9f9fe]">
+    <main className="flex-grow w-full max-w-md mx-auto px-5 pt-4 pb-32 relative min-h-screen bg-[#f9f9fe]">
       <TopBar />
 
-      <div className="space-y-8 mt-4">
-        {/* TỔNG CHI TIÊU THÁNG NÀY */}
-        <section className="flex justify-between items-end">
-          <div className="space-y-1">
-            <p className="text-[#616470] font-bold text-[10px] uppercase tracking-widest opacity-70">
-              Tổng chi tiêu tháng này
-            </p>
-            <h1 className="text-4xl font-black font-headline text-[#4b5b9a] tracking-tight">
-              {formatCurrency(currentTotal)}
-            </h1>
-          </div>
-          <div className="bg-[#ba1a1a]/10 px-3 py-1.5 rounded-xl flex items-center gap-1 border border-[#ba1a1a]/10">
-            <span className="material-symbols-outlined text-[#ba1a1a] text-sm">
-              trending_up
-            </span>
-            <span className="text-[#ba1a1a] font-black text-xs">+12%</span>
-          </div>
+      <div className="space-y-5 mt-3 animate-in fade-in duration-500">
+        {/* Header Hiển thị Tổng Tiền của Kỳ đang chọn */}
+        <section className="space-y-1">
+          <p className="text-[#616470] font-bold text-[9px] uppercase tracking-widest opacity-70">
+            Tổng chi ({selectedPeriodLabel})
+          </p>
+          <h1 className="text-4xl font-black font-headline text-[#4b5b9a] tracking-tight">
+            {formatCurrency(selectedTotalAmount)}
+          </h1>
         </section>
 
-        {/* BIỂU ĐỒ HÌNH TRÒN ĐẶC */}
-        <section className="bg-white p-6 rounded-[2.5rem] border border-[#e2e2e7]/60 shadow-sm space-y-6">
-          <h3 className="font-headline font-bold text-lg text-[#1a1c1f]">
-            Phân bổ chi tiêu
-          </h3>
-
-          <div className="flex flex-col items-center">
-            <div className="relative w-48 h-48 drop-shadow-2xl">
-              <svg
-                viewBox="0 0 32 32"
-                className="w-full h-full transform -rotate-90 rounded-full"
-              >
-                {pieSlices.map((slice) => (
-                  <circle
-                    key={slice.id}
-                    cx="16"
-                    cy="16"
-                    r="16"
-                    fill="transparent"
-                    stroke={slice.color}
-                    strokeWidth="32"
-                    strokeDasharray={`${slice.percent} 100`}
-                    strokeDashoffset={-slice.startPercent}
-                    className="transition-all duration-700 ease-in-out"
-                  />
-                ))}
-              </svg>
-            </div>
-
-            {/* Chú thích Hạng mục */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 w-full mt-8 border-t border-[#f3f3f8] pt-6 px-2">
-              {CATEGORIES_DATA.map((cat) => (
-                <div key={cat.id} className="flex items-center gap-2.5">
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: cat.color }}
-                  ></div>
-                  <span className="text-[11px] font-bold text-[#454650] truncate">
-                    {cat.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* XU HƯỚNG CHI TIÊU (BAR CHART CUỘN NGANG) */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-center px-1">
-            <h3 className="font-headline font-bold text-lg text-[#1a1c1f]">
+        {/* XU HƯỚNG CHI TIÊU (BIỂU ĐỒ CỘT) */}
+        <section className="space-y-3 sticky top-0 z-40 bg-[#f9f9fe] pt-2 pb-4 -mx-2 px-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="font-headline font-bold text-base text-[#1a1c1f]">
               Xu hướng chi tiêu
             </h3>
-            <div className="flex bg-[#ededf2] p-1 rounded-xl scale-90 shadow-inner">
-              {(["week", "month", "quarter", "year"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setTimeFilter(f)}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
-                    timeFilter === f
-                      ? "bg-white text-[#4b5b9a] shadow-sm"
-                      : "text-[#767681]"
-                  }`}
-                >
-                  {f === "week"
-                    ? "Tuần"
-                    : f === "month"
-                    ? "Tháng"
-                    : f === "quarter"
-                    ? "Quý"
-                    : "Năm"}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          <div className="bg-white border border-[#e2e2e7]/60 rounded-[2.5rem] shadow-sm relative overflow-hidden h-72 flex flex-col justify-end">
-            {/* Vùng cuộn ngang tự động scroll về bên phải */}
-            <div
-              ref={scrollRef}
-              className="overflow-x-auto flex items-end gap-4 px-8 pb-6 scroll-smooth scrollbar-hide w-full"
-            >
-              {currentTrend.map((data, index) => {
-                const barHeight = (data.amount / maxInTrend) * 140;
-                const isSelected = selectedIndex === index;
-
+            {/* Filter: Ngày / Tuần / Tháng */}
+            <div className="flex bg-[#ededf2] p-1 rounded-xl shadow-inner">
+              {(["day", "week", "month"] as const).map((f) => {
+                const labelMap = { day: "Ngày", week: "Tuần", month: "Tháng" };
                 return (
-                  <div
-                    key={index}
-                    className="flex flex-col items-center gap-3 shrink-0 cursor-pointer transition-all"
-                    style={{ width: currentTrend.length > 6 ? "46px" : "16%" }}
-                    onClick={() => setSelectedIndex(index)}
+                  <button
+                    key={f}
+                    onClick={() => setTimeFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap focus:outline-none ${
+                      timeFilter === f
+                        ? "bg-white text-[#4b5b9a] shadow-sm"
+                        : "text-[#767681]"
+                    }`}
                   >
-                    {/* Tooltip số tiền */}
-                    <div
-                      className={`absolute top-6 left-0 right-0 text-center transition-all duration-300 ${
-                        isSelected
-                          ? "opacity-100 translate-y-0 scale-100"
-                          : "opacity-0 translate-y-2 scale-90 pointer-events-none"
-                      }`}
-                    >
-                      <span className="bg-[#1a1c1f] text-white text-[9px] font-black px-3 py-1.5 rounded-full whitespace-nowrap shadow-xl">
-                        {data.label}: {formatCurrency(data.amount)}
-                      </span>
-                    </div>
-
-                    {/* Thanh biểu đồ */}
-                    <div
-                      className={`w-full rounded-t-xl transition-all duration-500 ease-out ${
-                        isSelected
-                          ? "bg-gradient-to-t from-[#4b5b9a] to-[#94a3e8] shadow-lg shadow-[#4b5b9a]/30 scale-x-105"
-                          : "bg-[#e2e2e7] hover:bg-[#dde1ff]"
-                      }`}
-                      style={{ height: `${barHeight}px` }}
-                    ></div>
-
-                    {/* Nhãn nhãn */}
-                    <span
-                      className={`text-[10px] font-black transition-all ${
-                        isSelected
-                          ? "text-[#4b5b9a] bg-[#dde1ff] px-2.5 py-0.5 rounded-full scale-110"
-                          : "text-[#616470]"
-                      }`}
-                    >
-                      {data.label}
-                    </span>
-                  </div>
+                    {labelMap[f]}
+                  </button>
                 );
               })}
             </div>
-            {/* Grid Line trang trí */}
-            <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,#fff,rgba(255,255,255,0.4))] -z-0 pointer-events-none"></div>
           </div>
 
-          {/* THỐNG KÊ NHIỀU NHẤT / ÍT NHẤT */}
-          <div className="grid grid-cols-2 gap-3 px-1">
-            <div className="bg-[#f3f3f8] p-4 rounded-2xl border border-[#e2e2e7]/30">
-              <p className="text-[10px] font-black text-[#616470] uppercase tracking-widest mb-1">
-                {unitLabel} cao nhất
-              </p>
-              <p className="text-sm font-black text-[#1a1c1f]">
-                {maxItem.label}:{" "}
-                <span className="text-[#ba1a1a]">
-                  {formatCurrency(maxItem.amount)}
+          {/* Biểu đồ Cột */}
+          <div className="bg-white border border-[#e2e2e7]/60 rounded-2xl shadow-sm relative overflow-hidden h-64 flex flex-col justify-end pt-8">
+            {loadingChart ? (
+              <div className="flex items-center justify-center h-full">
+                <span className="material-symbols-outlined animate-spin text-[#4b5b9a] text-3xl">
+                  autorenew
                 </span>
-              </p>
-            </div>
-            <div className="bg-[#f3f3f8] p-4 rounded-2xl border border-[#e2e2e7]/30">
-              <p className="text-[10px] font-black text-[#616470] uppercase tracking-widest mb-1">
-                {unitLabel} thấp nhất
-              </p>
-              <p className="text-sm font-black text-[#1a1c1f]">
-                {minItem.label}:{" "}
-                <span className="text-[#10b981]">
-                  {formatCurrency(minItem.amount)}
-                </span>
-              </p>
-            </div>
+              </div>
+            ) : trendTimeline.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-xs text-[#767681] font-bold">
+                Chưa có dữ liệu thống kê
+              </div>
+            ) : (
+              <div
+                ref={scrollRef}
+                className="overflow-x-auto flex items-end gap-3 px-6 pb-5 scrollbar-hide w-full h-full"
+              >
+                {trendTimeline.map((data, index) => {
+                  const barHeight = ((data.amount || 0) / maxInTrend) * 120;
+                  const isSelected = data.label === selectedPeriodLabel;
+                  const isLastItem = index === trendTimeline.length - 1;
+
+                  return (
+                    <div
+                      key={index}
+                      ref={isLastItem ? lastBarRef : null}
+                      className="flex flex-col items-center gap-2 shrink-0 cursor-pointer transition-all relative group"
+                      style={{
+                        width:
+                          trendTimeline.length > 6
+                            ? "55px"
+                            : `${100 / trendTimeline.length}%`,
+                        minWidth: "45px",
+                      }}
+                      onClick={() => setSelectedPeriodLabel(data.label)}
+                    >
+                      <div
+                        className={`absolute -top-7 whitespace-nowrap transition-all duration-300 origin-bottom z-10 ${
+                          isSelected
+                            ? "opacity-100 scale-100"
+                            : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
+                        }`}
+                      >
+                        <span className="text-[10px] font-black text-[#4b5b9a] bg-[#dde1ff] px-2 py-1 rounded-lg shadow-sm border border-[#4b5b9a]/20">
+                          {new Intl.NumberFormat("vi-VN", {
+                            notation: "compact",
+                          }).format(data.amount)}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`w-full rounded-t-lg transition-all duration-500 ease-out ${
+                          isSelected
+                            ? "bg-gradient-to-t from-[#4b5b9a] to-[#94a3e8] shadow-lg shadow-[#4b5b9a]/30 scale-x-105"
+                            : "bg-[#e2e2e7] group-hover:bg-[#dde1ff]"
+                        }`}
+                        style={{ height: `${Math.max(barHeight, 4)}px` }}
+                      ></div>
+
+                      <span
+                        className={`text-[9px] font-black transition-all text-center ${
+                          isSelected
+                            ? "text-[#4b5b9a] bg-[#dde1ff] px-2 py-0.5 rounded-full"
+                            : "text-[#616470]"
+                        }`}
+                      >
+                        {data.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {/* Thống kê Cao nhất / Thấp nhất */}
+          {!loadingChart && trendTimeline.length > 0 && (
+            <div className="grid grid-cols-2 gap-2.5 px-1">
+              <div className="bg-[#f3f3f8] p-3 rounded-xl flex flex-col justify-between">
+                <p className="text-[9px] font-black text-[#616470] uppercase tracking-widest mb-1">
+                  Cao nhất
+                </p>
+                <p className="text-xs font-black text-[#1a1c1f]">
+                  {maxItem?.label}:{" "}
+                  <span className="text-[#ba1a1a]">
+                    {formatCurrency(maxItem?.amount || 0)}
+                  </span>
+                </p>
+              </div>
+              <div className="bg-[#f3f3f8] p-3 rounded-xl flex flex-col justify-between">
+                <p className="text-[9px] font-black text-[#616470] uppercase tracking-widest mb-1">
+                  Thấp nhất
+                </p>
+                <p className="text-xs font-black text-[#1a1c1f]">
+                  {minItem?.label}:{" "}
+                  <span className="text-[#10b981]">
+                    {formatCurrency(minItem?.amount || 0)}
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
         </section>
 
-        {/* DANH SÁCH CHI TIẾT HẠNG MỤC */}
-        <section className="space-y-4 pb-4">
-          <h3 className="font-headline font-bold text-lg text-[#1a1c1f]">
-            Chi tiết theo hạng mục
-          </h3>
-          <div className="space-y-3">
-            {CATEGORIES_DATA.map((cat) => (
-              <Link
-                href={`/analytics/${cat.id}`}
-                key={cat.id}
-                className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-[#e2e2e7]/50 hover:border-[#4b5b9a] transition-all group active:scale-[0.98]"
-              >
-                <div className="flex items-center gap-4">
+        {/* BIỂU ĐỒ TRÒN - Phân bổ chi tiêu */}
+        {selectedTotalAmount > 0 && (
+          <section className="bg-white p-5 rounded-2xl border border-[#e2e2e7]/60 shadow-sm">
+            <h3 className="font-headline font-bold text-base text-[#1a1c1f] mb-4">
+              Phân bổ chi tiêu - {selectedPeriodLabel}
+            </h3>
+
+            <div className="flex flex-col items-center">
+              <div ref={pieRef} className="relative w-56 h-56">
+                <svg
+                  viewBox="0 0 40 40"
+                  className="w-full h-full transform -rotate-90"
+                >
+                  {pieSlices.map((slice) => {
+                    const isHovered = hoveredSliceId === slice.id;
+                    const startX =
+                      20 + 18 * Math.cos((slice.startAngle * Math.PI) / 180);
+                    const startY =
+                      20 + 18 * Math.sin((slice.startAngle * Math.PI) / 180);
+                    const endX =
+                      20 + 18 * Math.cos((slice.endAngle * Math.PI) / 180);
+                    const endY =
+                      20 + 18 * Math.sin((slice.endAngle * Math.PI) / 180);
+                    const largeArc =
+                      slice.endAngle - slice.startAngle > 180 ? 1 : 0;
+
+                    // Nếu 100% thì vẽ hình tròn nguyên
+                    if (slice.percent === 100) {
+                      return (
+                        <circle
+                          key={slice.id}
+                          cx="20"
+                          cy="20"
+                          r="18"
+                          fill={slice.color}
+                        />
+                      );
+                    }
+
+                    const pathData = `
+                      M 20 20
+                      L ${startX} ${startY}
+                      A 18 18 0 ${largeArc} 1 ${endX} ${endY}
+                      Z
+                    `;
+
+                    return (
+                      <path
+                        key={slice.id}
+                        d={pathData}
+                        fill={slice.color}
+                        stroke="white"
+                        strokeWidth="0.5"
+                        className="transition-all duration-200 cursor-pointer"
+                        style={{
+                          opacity:
+                            hoveredSliceId && hoveredSliceId !== slice.id
+                              ? 0.5
+                              : 1,
+                          transform: isHovered ? "scale(1.02)" : "scale(1)",
+                          transformOrigin: "20px 20px",
+                        }}
+                        onMouseMove={(e) => handlePieMouseMove(e, slice.id)}
+                        onMouseLeave={() => setHoveredSliceId(null)}
+                      />
+                    );
+                  })}
+                </svg>
+
+                {/* Tooltip Hover */}
+                {hoveredSlice && (
                   <div
-                    className={`w-12 h-12 rounded-full ${cat.bgClass} flex items-center justify-center transition-colors group-hover:bg-[#dde1ff]`}
+                    className="absolute pointer-events-none z-50"
+                    style={{
+                      left: tooltipPosition.x,
+                      top: tooltipPosition.y,
+                      transform: "translate(-50%, -120%)",
+                    }}
                   >
-                    <span
-                      className="material-symbols-outlined text-xl"
-                      style={{ color: cat.color }}
+                    <div
+                      className="px-3 py-2 rounded-xl shadow-xl border border-white/20 text-white"
+                      style={{ backgroundColor: hoveredSlice.color }}
                     >
-                      {cat.icon}
-                    </span>
+                      <p className="text-[9px] font-bold uppercase tracking-wider opacity-90">
+                        {hoveredSlice.name}
+                      </p>
+                      <p className="text-lg font-black">
+                        {hoveredSlice.percent.toFixed(1)}%
+                      </p>
+                      <p className="text-[9px] font-medium opacity-90">
+                        {formatCurrency(hoveredSlice.amount || 0)}
+                      </p>
+                    </div>
+                    <div
+                      className="w-2 h-2 rotate-45 mx-auto -mt-1"
+                      style={{ backgroundColor: hoveredSlice.color }}
+                    ></div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-[#1a1c1f] text-sm group-hover:text-[#4b5b9a] truncate">
+                )}
+              </div>
+
+              {/* Chú thích màu sắc */}
+              <div className="flex flex-wrap justify-center gap-x-3 gap-y-1.5 mt-4">
+                {selectedCategoriesData.map((cat) => (
+                  <button
+                    key={cat.id}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-[#f3f3f8] transition-colors focus:outline-none"
+                    onMouseEnter={() => setHoveredSliceId(cat.id)}
+                    onMouseLeave={() => setHoveredSliceId(null)}
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: cat.color }}
+                    ></div>
+                    <span className="text-[9px] font-bold text-[#616470]">
                       {cat.name}
-                    </p>
-                    <p className="text-[10px] text-[#616470] font-medium mt-0.5">
-                      {cat.txCount} giao dịch
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="font-headline font-bold text-[#1a1c1f]">
-                    {formatCurrency(cat.amount)}
-                  </p>
-                  <p className="text-[9px] font-bold text-[#767681] uppercase tracking-tighter">
-                    Chiếm {Math.round((cat.amount / currentTotal) * 100)}%
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* DANH SÁCH HẠNG MỤC TƯƠNG ỨNG */}
+        <section className="space-y-3 pb-2">
+          <h3 className="font-headline font-bold text-base text-[#1a1c1f]">
+            Chi tiết hạng mục - {selectedPeriodLabel}
+          </h3>
+
+          {selectedTotalAmount === 0 ? (
+            <div className="text-center py-8 text-[#767681] text-sm font-bold bg-white rounded-2xl border border-[#e2e2e7]/50">
+              Không có dữ liệu chi tiêu trong {contextLabelText.toLowerCase()}{" "}
+              này.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {selectedCategoriesData.map((cat) => {
+                const percent = ((cat.amount || 0) / selectedTotalAmount) * 100;
+
+                return (
+                  <Link
+                    href={`/analytics/${cat.id}?name=${encodeURIComponent(
+                      cat.name
+                    )}&timeFilter=${timeFilter}&period=${encodeURIComponent(
+                      selectedPeriodLabel
+                    )}`}
+                    key={cat.id}
+                    className="bg-white p-3.5 rounded-xl flex items-center justify-between shadow-sm border border-[#e2e2e7]/50 hover:border-[#4b5b9a] transition-all group active:scale-[0.98] focus:outline-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: cat.color + "20" }}
+                      >
+                        <span
+                          className="material-symbols-outlined text-lg"
+                          style={{ color: cat.color }}
+                        >
+                          {cat.icon}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#1a1c1f] text-xs group-hover:text-[#4b5b9a]">
+                          {cat.name}
+                        </p>
+                        <p className="text-[9px] text-[#616470]">
+                          {cat.txCount || 0} giao dịch
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-headline font-bold text-xs text-[#1a1c1f]">
+                        {formatCurrency(cat.amount || 0)}
+                      </p>
+                      <p className="text-[8px] font-bold text-[#767681]">
+                        {percent.toFixed(1)}%
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
     </main>
