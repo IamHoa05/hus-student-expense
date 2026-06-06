@@ -111,17 +111,23 @@ def issue_token(user, role: str = "user"):
         # ✅ Bỏ scope — không có trong OAuth2Token schema
     )
 
+import os
+
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    """Set token vào HttpOnly Cookie hỗ trợ Cross-Site chạy trên Render + Vercel"""
+    """Set token vào HttpOnly Cookie hỗ trợ Cross-Site chạy trên Render + Vercel và Local"""
     access_minutes = settings.OAUTH2_ACCESS_TOKEN_EXPIRE_MINUTES
     refresh_days = settings.OAUTH2_REFRESH_TOKEN_EXPIRE_DAYS
+
+    # Tự động kiểm tra: Nếu biến môi trường trên Render có thiết lập FRONTEND_URL 
+    # (hoặc bất kỳ biến nào chỉ có trên môi trường online) thì coi như là Production.
+    is_production = os.getenv("FRONTEND_URL") is not None
 
     response.set_cookie(
         key="access_token", 
         value=access_token, 
         httponly=True,
-        samesite="none",   # 🔴 Sửa thành "none" để truyền xuyên domain
-        secure=True,       # 🔴 Sửa thành True (bắt buộc phải đi kèm samesite="none")
+        samesite="none" if is_production else "lax",   # Trên mạng dùng "none", local dùng "lax"
+        secure=True if is_production else False,       # Trên mạng dùng True, local dùng False
         path="/", 
         max_age=access_minutes * 60
     )
@@ -129,8 +135,8 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
         key="refresh_token", 
         value=refresh_token, 
         httponly=True,
-        samesite="none",   # 🔴 Sửa thành "none"
-        secure=True,       # 🔴 Sửa thành True
-        path="/",          # 💡 Nên để "/" để các router khác cũng có thể đọc được khi cần refresh
+        samesite="none" if is_production else "lax",   # Trên mạng dùng "none", local dùng "lax"
+        secure=True if is_production else False,       # Trên mạng dùng True, local dùng False
+        path="/",
         max_age=refresh_days * 24 * 3600
     )

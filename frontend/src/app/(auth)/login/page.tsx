@@ -62,11 +62,13 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    // Chuyển hướng trình duyệt thẳng tới API của Backend
-    window.location.href = `${API_URL}/auth/google/login?next=/dashboard`;
-  };
-
+const handleGoogleLogin = () => {
+  // window.location.origin sẽ tự động lấy domain hiện tại bạn đang đứng 
+  // (Nếu đang test local sẽ là http://localhost:3000, nếu trên mạng sẽ là link Vercel)
+  const currentOrigin = window.location.origin;
+  
+  window.location.href = `${API_URL}/auth/google/login?next=${currentOrigin}/dashboard`;
+};
   return (
     // 1. Loại bỏ các class chia cột flex-row, giữ lại flex-col và căn giữa tuyệt đối
     <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden">
