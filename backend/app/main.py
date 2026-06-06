@@ -44,25 +44,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# SessionMiddleware thêm trước → chạy sau
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    session_cookie="swallet_session",
+    same_site="none",
+    https_only=True
+)
+
+# CORSMiddleware thêm sau → chạy TRƯỚC (xử lý preflight OPTIONS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://hus-student-expense.vercel.app"  # <-- Bắt buộc phải có dòng này!
+        "https://hus-student-expense.vercel.app"
     ],
-    allow_credentials=True,
+    allow_credentials=True,   # Bắt buộc để cookie hoạt động
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-
-# 1. Đưa SessionMiddleware lên trước
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.SECRET_KEY,
-    session_cookie="swallet_session",  
-    same_site="none",  # Viết thường chữ "none"
-    https_only=True    # Không để dòng domain nữa để trình duyệt tự hiểu theo cơ chế Cross-Site
 )
 
 # 2. Đặt CORSMiddleware ở CUỐI CÙNG (để nó bọc ngoài cùng, xử lý OPTIONS đầu tiên)
