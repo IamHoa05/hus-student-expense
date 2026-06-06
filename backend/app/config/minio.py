@@ -1,19 +1,23 @@
 # config/minio.py
 import boto3
 from botocore.exceptions import ClientError
-from botocore.client import Config  # Giao thức ký v4 của AWS S3
+from botocore.client import Config  
 from app.config.settings import settings
 
 BUCKET_NAME = settings.MINIO_BUCKET_NAME
 
-# Khởi tạo s3_client tương thích 100% với Backblaze B2
+# Tự động chọn giao thức: Nếu MINIO_SECURE=True thì dùng https, ngược lại dùng http
+scheme = "https" if settings.MINIO_SECURE else "http"
+
+# Khởi tạo s3_client linh hoạt cho cả Local và Production
 s3_client = boto3.client(
     "s3",
-    endpoint_url=f"https://{settings.MINIO_ENDPOINT}",  
+    endpoint_url=f"{scheme}://{settings.MINIO_ENDPOINT}",  # ← Tự động đổi giữa http và https
     aws_access_key_id=settings.MINIO_ACCESS_KEY,
     aws_secret_access_key=settings.MINIO_SECRET_KEY,
-    region_name="us-west-004",  # ← ĐÃ SỬA CHUẨN: Chỉ để cụm vùng vật lý us-west-004
-    config=Config(signature_version='s3v4')  # Bắt buộc cho Backblaze
+    # Nếu chạy local (không secure) thì để us-east-1 mặc định của MinIO, nếu trên Render thì dùng vùng Backblaze
+    region_name="us-west-004" if settings.MINIO_SECURE else "us-east-1",  
+    config=Config(signature_version='s3v4')  
 )
 
 
@@ -22,7 +26,6 @@ def ensure_bucket():
         s3_client.head_bucket(Bucket=BUCKET_NAME)
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
-        # Backblaze đôi khi trả về 403 Forbidden nếu bucket chưa cấu hình xong quyền đầy đủ cho Key
         if error_code in ("404", "NoSuchBucket", "403"):
             try:
                 s3_client.create_bucket(Bucket=BUCKET_NAME)
@@ -42,6 +45,10 @@ def upload_file(object_name: str, data: bytes, content_type: str = "image/jpeg")
 
 
 def get_public_url(object_name: str) -> str:
-    """Trả về link ảnh chuẩn từ Backblaze để hiển thị công khai lên giao diện Frontend"""
-    # Vì endpoint của bạn là us-west-004, nên máy chủ phân phối ảnh công khai sẽ là f004
-    return f"https://f004.backblazeb2.com/file/{BUCKET_NAME}/{object_name}"
+    """Trả về link ảnh chuẩn tùy theo môi trường"""
+    if settings.MINIO_SECURE:
+        # Link Public chuẩn cho môi trường chạy thật với Backblaze B2
+        return f"https://f004.backblazeb2.com/file/{BUCKET_NAME}/{object_name}"
+    else:
+        # Link Public cũ cho môi trường Docker Local của bạn
+        return f"http://{settings.MINIO_PUBLIC_ENDPOINT}/{BUCKET_NAME}/{object_name}"
