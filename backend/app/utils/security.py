@@ -119,8 +119,18 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
     refresh_days = settings.OAUTH2_REFRESH_TOKEN_EXPIRE_DAYS
 
     # Tự động kiểm tra: Nếu biến môi trường trên Render có thiết lập FRONTEND_URL 
-    # (hoặc bất kỳ biến nào chỉ có trên môi trường online) thì coi như là Production.
-    is_production = os.getenv("FRONTEND_URL") is not None
+    # Tự động kiểm tra: Nếu biến môi trường FRONTEND_URL tồn tại và có scheme https
+    # thì coi như là Production. Nếu FRONTEND_URL dùng http (ví dụ khi test trên
+    # LAN) thì không bật secure cookies so we can test from mobile devices.
+    frontend_url = os.getenv("FRONTEND_URL")
+    is_production = False
+    if frontend_url:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(frontend_url)
+            is_production = p.scheme == "https"
+        except Exception:
+            is_production = True
 
     response.set_cookie(
         key="access_token", 
