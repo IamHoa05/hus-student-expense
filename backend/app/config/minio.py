@@ -12,12 +12,14 @@ scheme = "https" if settings.MINIO_SECURE else "http"
 # Khởi tạo s3_client linh hoạt cho cả Local và Production
 s3_client = boto3.client(
     "s3",
-    endpoint_url=f"{scheme}://{settings.MINIO_ENDPOINT}",  # ← Tự động đổi giữa http và https
+    endpoint_url=f"{scheme}://{settings.MINIO_ENDPOINT}",  
     aws_access_key_id=settings.MINIO_ACCESS_KEY,
     aws_secret_access_key=settings.MINIO_SECRET_KEY,
-    # Nếu chạy local (không secure) thì để us-east-1 mặc định của MinIO, nếu trên Render thì dùng vùng Backblaze
-    region_name="us-west-004" if settings.MINIO_SECURE else "us-east-1",  
-    config=Config(signature_version='s3v4')  
+    region_name="us-west-004",  # Đảm bảo chữ viết thường và khớp với endpoint s3.us-west-004
+    config=Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'virtual'} # Ép cấu trúc nhận diện đường dẫn ảo chuẩn S3 cho B2
+    )
 )
 
 
