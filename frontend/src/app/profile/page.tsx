@@ -23,32 +23,31 @@ type Category = {
 export default function ProfilePage() {
   const router = useRouter();
 
-  // Chặn lỗi Hydration
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // States thông tin người dùng
-  const [profile, setProfile] = useState({
-    name: "",
-    email: "",
-    number: "",
-  });
+  const [profile, setProfile] = useState({ name: "", email: "", number: "" });
   const [editName, setEditName] = useState("");
   const [avtUrl, setAvtUrl] = useState<string | null>(null);
 
-  // States quản lý hạng mục và hạn mức
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Record<number, number>>({});
+  // originalBudgets: lưu những category_id đã có budget trên server
+  const [originalBudgets, setOriginalBudgets] = useState<
+    Record<number, number>
+  >({});
   const [changedBudgets, setChangedBudgets] = useState<Record<number, number>>(
     {}
   );
+  // editingCategories: những category đang ở trạng thái cho phép sửa
+  const [editingCategories, setEditingCategories] = useState<
+    Record<number, boolean>
+  >({});
 
-  // States quản lý trạng thái loading riêng biệt
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingBudgets, setIsSavingBudgets] = useState(false);
   const [isUploadingAvt, setIsUploadingAvt] = useState(false);
 
-  // Quản lý thông báo Popup (Toast)
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({
     show: false,
     msg: "",
@@ -56,9 +55,7 @@ export default function ProfilePage() {
 
   const triggerToast = (msg: string) => {
     setToast({ show: true, msg });
-    setTimeout(() => {
-      setToast({ show: false, msg: "" });
-    }, 2500);
+    setTimeout(() => setToast({ show: false, msg: "" }), 2500);
   };
 
   useEffect(() => {
@@ -68,9 +65,6 @@ export default function ProfilePage() {
     fetchBudgets();
   }, []);
 
-  // ==========================================================
-  // 1. LẤY THÔNG TIN NGƯỜI DÙNG
-  // ==========================================================
   const fetchUser = async () => {
     try {
       const response = await fetch(`${API_URL}/auth/me`, {
@@ -78,15 +72,12 @@ export default function ProfilePage() {
       });
       if (!response.ok) return;
       const data = await response.json();
-
       setProfile({
         name: data.full_name || "",
         email: data.email || "",
         number: data.phone || data.number || "",
       });
       setEditName(data.full_name || "");
-
-      // Xử lý ảnh đại diện (Bỏ qua nếu backend trả chữ "string" mặc định)
       if (data.avt_url && data.avt_url !== "string") {
         setAvtUrl(data.avt_url);
       } else {
@@ -97,62 +88,45 @@ export default function ProfilePage() {
     }
   };
 
-  // ==========================================================
-  // 2. TẢI ẢNH ĐẠI DIỆN LÊN (POST /avatars/me)
-  // ==========================================================
   const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Dùng FormData để gửi file ảnh
     const formData = new FormData();
-    formData.append("file", file); // Trường dữ liệu thường là 'file'
-
+    formData.append("file", file);
     setIsUploadingAvt(true);
     try {
       const res = await fetch(`${API_URL}/avatars/me`, {
         method: "POST",
         credentials: "include",
-        body: formData, // Không set Content-Type để trình duyệt tự nhận multipart/form-data
+        body: formData,
       });
-
       if (!res.ok) throw new Error();
-
       const data = await res.json();
       setAvtUrl(data.avt_url);
       triggerToast("✅ Đã cập nhật ảnh đại diện!");
-    } catch (err) {
+    } catch {
       triggerToast("❌ Lỗi tải ảnh lên!");
     } finally {
       setIsUploadingAvt(false);
-      // Xóa value để có thể chọn lại cùng 1 file nếu cần
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // ==========================================================
-  // 3. XÓA ẢNH ĐẠI DIỆN (DELETE /avatars/me)
-  // ==========================================================
   const handleDeleteAvatar = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Ngăn click nhầm vào nút upload bên dưới
+    e.stopPropagation();
     try {
       const res = await fetch(`${API_URL}/avatars/me`, {
         method: "DELETE",
         credentials: "include",
       });
-
       if (!res.ok) throw new Error();
-
       setAvtUrl(null);
       triggerToast("✅ Đã xóa ảnh đại diện!");
-    } catch (err) {
+    } catch {
       triggerToast("❌ Lỗi khi xóa ảnh!");
     }
   };
 
-  // ==========================================================
-  // CÁC HÀM GET HẠN MỨC & DANH MỤC
-  // ==========================================================
   const fetchCategories = async () => {
     try {
       const response = await fetch(`${API_URL}/categories`, {
@@ -174,71 +148,72 @@ export default function ProfilePage() {
       const now = new Date();
       const m = now.getMonth() + 1;
       const y = now.getFullYear();
-
       const response = await fetch(
         `${API_URL}/budgets/remaining?month=${m}&year=${y}`,
         { credentials: "include" }
       );
-
       if (!response.ok) return;
       const data = await response.json();
       const amountMap: Record<number, number> = {};
       const allocations = data.allocations || data.data?.allocations || [];
-
       allocations.forEach((item: any) => {
-        amountMap[item.category_id] = item.amount_limit || 0;
+        if (item.amount_limit && item.amount_limit > 0) {
+          amountMap[item.category_id] = item.amount_limit;
+        }
       });
       setBudgets(amountMap);
+      // Lưu lại snapshot để biết category nào đã tồn tại trên server
+      setOriginalBudgets(amountMap);
     } catch (err) {
       console.error("Lỗi khi tải hạn mức:", err);
     }
   };
 
-  // ==========================================================
-  // LƯU TÊN (Dùng PATCH để cập nhật một phần)
-  // ==========================================================
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
       triggerToast("⚠️ Tên không được để trống!");
       return;
     }
-
     setIsSavingProfile(true);
     try {
       const res = await fetch(`${API_URL}/auth/me`, {
-        method: "PATCH", // <--- ĐỔI TỪ PUT THÀNH PATCH Ở ĐÂY
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          full_name: editName.trim(),
-        }),
+        body: JSON.stringify({ full_name: editName.trim() }),
       });
-
-      if (!res.ok) {
-        // Nếu vẫn lỗi, thử bắt lỗi xem Backend báo gì để dễ sửa
-        const errorData = await res.json().catch(() => ({}));
-        console.error("Chi tiết lỗi từ Backend:", errorData);
-        throw new Error();
-      }
-
+      if (!res.ok) throw new Error();
       setProfile((prev) => ({ ...prev, name: editName.trim() }));
       triggerToast("✅ Đã cập nhật họ và tên!");
-    } catch (err) {
+    } catch {
       triggerToast("❌ Không thể cập nhật tên!");
     } finally {
       setIsSavingProfile(false);
     }
   };
-  // ==========================================================
-  // LƯU HẠN MỨC
-  // ==========================================================
+
+  // Toggle chế độ edit cho một category đã có budget
+  const toggleEdit = (categoryId: number) => {
+    setEditingCategories((prev) => ({
+      ...prev,
+      [categoryId]: !prev[categoryId],
+    }));
+  };
+
+  // Kiểm tra một category có thể nhập liệu không:
+  // - Chưa có budget => luôn cho nhập
+  // - Đã có budget => chỉ cho nhập khi đang ở chế độ edit
+  const isEditable = (categoryId: number) => {
+    if (!originalBudgets[categoryId]) return true;
+    return !!editingCategories[categoryId];
+  };
+
   const handleSaveBudgets = async () => {
     const totalChanges = Object.keys(changedBudgets).length;
     if (totalChanges === 0) {
       triggerToast("⚠️ Bạn chưa thay đổi hạn mức nào!");
       return;
     }
-
     setIsSavingBudgets(true);
     try {
       const now = new Date();
@@ -252,8 +227,10 @@ export default function ProfilePage() {
       const budgetPromises = Object.entries(changedBudgets).map(
         async ([catIdStr, amountLimit]) => {
           const catId = Number(catIdStr);
+          // Đã có trên server => PATCH, chưa có => POST
+          const isExisting = originalBudgets[catId] !== undefined;
           return fetch(`${API_URL}/budgets`, {
-            method: "POST",
+            method: isExisting ? "PATCH" : "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
             body: JSON.stringify({
@@ -269,11 +246,11 @@ export default function ProfilePage() {
       );
 
       await Promise.all(budgetPromises);
-
       setChangedBudgets({});
+      setEditingCategories({});
       await fetchBudgets();
       triggerToast("✅ Đã lưu tất cả hạn mức mới!");
-    } catch (err) {
+    } catch {
       triggerToast("❌ Không thể lưu hạn mức ngân sách!");
     } finally {
       setIsSavingBudgets(false);
@@ -309,10 +286,9 @@ export default function ProfilePage() {
       </header>
 
       <div className="px-5 pt-6 space-y-6">
-        {/* KHỐI 1: THÔNG TIN CÁ NHÂN & ẢNH ĐẠI DIỆN */}
+        {/* KHỐI 1: THÔNG TIN CÁ NHÂN */}
         <section className="bg-white p-5 rounded-2xl border border-[#e2e2e7]/50 shadow-sm space-y-4">
           <div className="flex items-center gap-4">
-            {/* AVATAR CLICK ĐỂ UPLOAD */}
             <div className="relative group shrink-0">
               <div
                 className="w-16 h-16 rounded-full overflow-hidden bg-[#e0e2f1] flex items-center justify-center border-2 border-[#dde1ff] shadow-sm cursor-pointer transition-transform active:scale-95"
@@ -333,29 +309,22 @@ export default function ProfilePage() {
                     {getInitials(editName)}
                   </span>
                 )}
-
-                {/* Lớp mờ báo hiệu có thể click sửa khi hover */}
                 <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center transition-all">
                   <span className="material-symbols-outlined text-white text-lg drop-shadow-md">
                     edit
                   </span>
                 </div>
               </div>
-
-              {/* NÚT XÓA ẢNH (Chỉ hiện khi có ảnh) */}
               {avtUrl && !isUploadingAvt && (
                 <button
                   onClick={handleDeleteAvatar}
                   className="absolute -top-1 -right-1 w-5 h-5 bg-white border border-[#e2e2e7] text-[#ba1a1a] rounded-full flex items-center justify-center shadow-sm hover:bg-[#ffdad6] active:scale-90 transition-all outline-none"
-                  title="Xóa ảnh đại diện"
                 >
                   <span className="material-symbols-outlined text-[12px]">
                     close
                   </span>
                 </button>
               )}
-
-              {/* Input file ẩn */}
               <input
                 type="file"
                 accept="image/*"
@@ -364,7 +333,6 @@ export default function ProfilePage() {
                 onChange={handleUploadAvatar}
               />
             </div>
-
             <div className="min-w-0">
               <h4 className="font-bold text-sm text-[#1a1c1f] truncate">
                 {profile.name || "Người dùng"}
@@ -377,7 +345,6 @@ export default function ProfilePage() {
               </p>
             </div>
           </div>
-
           <div className="flex gap-2 pt-1">
             <input
               type="text"
@@ -420,53 +387,95 @@ export default function ProfilePage() {
           </div>
 
           <div className="space-y-2">
-            {categories.map((cat) => (
-              <div
-                key={cat.category_id}
-                className="bg-white p-3.5 rounded-xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#f3f3f8] flex items-center justify-center text-[#4b5b9a]">
-                    <span className="material-symbols-outlined text-lg">
-                      {cat.icon}
+            {categories.map((cat) => {
+              const hasExistingBudget =
+                originalBudgets[cat.category_id] !== undefined;
+              const canEdit = isEditable(cat.category_id);
+
+              return (
+                <div
+                  key={cat.category_id}
+                  className="bg-white p-3.5 rounded-xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#f3f3f8] flex items-center justify-center text-[#4b5b9a]">
+                      <span className="material-symbols-outlined text-lg">
+                        {cat.icon}
+                      </span>
+                    </div>
+                    <span className="font-bold text-xs text-[#1a1c1f] max-w-[100px] truncate">
+                      {cat.category_name}
                     </span>
                   </div>
-                  <span className="font-bold text-xs text-[#1a1c1f] max-w-[120px] truncate">
-                    {cat.category_name}
-                  </span>
-                </div>
 
-                <div className="flex items-center gap-1 bg-[#f9f9fe] px-2 py-1 rounded-lg border border-[#e2e2e7] focus-within:border-[#4b5b9a] transition-colors">
-                  <input
-                    type="text"
-                    placeholder="0"
-                    value={
-                      budgets[cat.category_id]
-                        ? new Intl.NumberFormat("vi-VN").format(
-                            budgets[cat.category_id]
-                          )
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const val =
-                        parseInt(e.target.value.replace(/\D/g, ""), 10) || 0;
-                      setBudgets((prev) => ({
-                        ...prev,
-                        [cat.category_id]: val,
-                      }));
-                      setChangedBudgets((prev) => ({
-                        ...prev,
-                        [cat.category_id]: val,
-                      }));
-                    }}
-                    className="w-24 text-right bg-transparent border-none focus:outline-none font-bold text-[#1a1c1f] text-xs outline-none"
-                  />
-                  <span className="text-[10px] font-bold text-[#767681]">
-                    đ
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {/* Nút edit — chỉ hiển thị khi đã có budget */}
+                    {hasExistingBudget && (
+                      <button
+                        onClick={() => toggleEdit(cat.category_id)}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all outline-none ${
+                          editingCategories[cat.category_id]
+                            ? "bg-[#4b5b9a] text-white"
+                            : "bg-[#f3f3f8] text-[#4b5b9a] hover:bg-[#e0e2f1]"
+                        }`}
+                        title={
+                          editingCategories[cat.category_id]
+                            ? "Hủy chỉnh sửa"
+                            : "Chỉnh sửa hạn mức"
+                        }
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          {editingCategories[cat.category_id]
+                            ? "close"
+                            : "edit"}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Input hạn mức */}
+                    <div
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors ${
+                        canEdit
+                          ? "bg-[#f9f9fe] border-[#e2e2e7] focus-within:border-[#4b5b9a]"
+                          : "bg-[#f3f3f8] border-transparent"
+                      }`}
+                    >
+                      <input
+                        type="text"
+                        placeholder="0"
+                        disabled={!canEdit}
+                        value={
+                          budgets[cat.category_id]
+                            ? new Intl.NumberFormat("vi-VN").format(
+                                budgets[cat.category_id]
+                              )
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const val =
+                            parseInt(e.target.value.replace(/\D/g, ""), 10) ||
+                            0;
+                          setBudgets((prev) => ({
+                            ...prev,
+                            [cat.category_id]: val,
+                          }));
+                          setChangedBudgets((prev) => ({
+                            ...prev,
+                            [cat.category_id]: val,
+                          }));
+                        }}
+                        className={`w-24 text-right bg-transparent border-none focus:outline-none font-bold text-xs outline-none ${
+                          canEdit ? "text-[#1a1c1f]" : "text-[#767681]"
+                        }`}
+                      />
+                      <span className="text-[10px] font-bold text-[#767681]">
+                        đ
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <button

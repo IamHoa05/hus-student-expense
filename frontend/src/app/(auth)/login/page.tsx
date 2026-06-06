@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-
+import { saveTokens } from "@/lib/auth";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function LoginPage() {
@@ -56,6 +56,8 @@ export default function LoginPage() {
       // Backend đã tự set_auth_cookies rồi nên không cần lưu token thủ công
       console.log("Đăng nhập thành công:", data);
 
+      saveTokens(data.access_token, data.refresh_token);
+      
       router.push("/dashboard");
     } catch (err: any) {
       setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
