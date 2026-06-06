@@ -50,24 +50,16 @@ app.add_middleware(
     secret_key=settings.SECRET_KEY,
     session_cookie="swallet_session",
     same_site="none",
-    # Only enforce https-only session cookie when frontend uses https
-    https_only=(lambda: (True if (settings.FRONTEND_URL and settings.FRONTEND_URL.startswith("https")) else False))()
+    https_only=True
 )
 
 # CORSMiddleware thêm sau → chạy TRƯỚC (xử lý preflight OPTIONS)
 app.add_middleware(
     CORSMiddleware,
-    # Allow default dev + deployed origins, and also include any additional
-    # FRONTEND_URL or FRONTEND_URLS (comma-separated) provided via env.
-    allow_origins=(lambda: (
-        (lambda base, extra: base + extra)(
-            [
-                "http://localhost:3000",
-                "https://hus-student-expense.vercel.app",
-            ],
-            (lambda: (os.environ.get("FRONTEND_URLS", "").split(",") if os.environ.get("FRONTEND_URLS") else []) + ([os.environ.get("FRONTEND_URL")] if os.environ.get("FRONTEND_URL") else []))()
-        )
-    ))(),
+    allow_origins=[
+        "http://localhost:3000",
+        "https://hus-student-expense.vercel.app"
+    ],
     allow_credentials=True,   # Bắt buộc để cookie hoạt động
     allow_methods=["*"],
     allow_headers=["*"],
