@@ -9,17 +9,17 @@ BUCKET_NAME = settings.MINIO_BUCKET_NAME
 # Tự động chọn giao thức: Nếu MINIO_SECURE=True thì dùng https, ngược lại dùng http
 scheme = "https" if settings.MINIO_SECURE else "http"
 
-# Khởi tạo s3_client linh hoạt cho cả Local và Production
+#Khởi tạo s3_client linh hoạt cho cả Local và Production
 s3_client = boto3.client(
     "s3",
     endpoint_url=f"{scheme}://{settings.MINIO_ENDPOINT}",  
     aws_access_key_id=settings.MINIO_ACCESS_KEY,
     aws_secret_access_key=settings.MINIO_SECRET_KEY,
-    region_name="us-west-004",  # Đảm bảo chữ viết thường và khớp với endpoint s3.us-west-004
     config=Config(
         signature_version='s3v4',
-        s3={'addressing_style': 'virtual'} # Ép cấu trúc nhận diện đường dẫn ảo chuẩn S3 cho B2
+        s3={'addressing_style': 'path'}  # ✅ đổi virtual → path
     )
+    # ✅ bỏ region_name hoàn toàn
 )
 
 
