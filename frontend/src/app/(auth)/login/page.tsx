@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { saveTokens } from "@/lib/auth";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function LoginPage() {
@@ -56,21 +56,17 @@ export default function LoginPage() {
       // Backend đã tự set_auth_cookies rồi nên không cần lưu token thủ công
       console.log("Đăng nhập thành công:", data);
 
-      saveTokens(data.access_token, data.refresh_token);
-      
       router.push("/dashboard");
     } catch (err: any) {
       setErrorMsg(err.message || "Không thể kết nối đến máy chủ.");
     }
   };
 
-const handleGoogleLogin = () => {
-  // window.location.origin sẽ tự động lấy domain hiện tại bạn đang đứng 
-  // (Nếu đang test local sẽ là http://localhost:3000, nếu trên mạng sẽ là link Vercel)
-  const currentOrigin = window.location.origin;
-  
-  window.location.href = `${API_URL}/auth/google/login?next=${currentOrigin}/dashboard`;
-};
+  const handleGoogleLogin = () => {
+    // Chuyển hướng trình duyệt thẳng tới API của Backend
+    window.location.href = `${API_URL}/auth/google/login?next=/dashboard`;
+  };
+
   return (
     // 1. Loại bỏ các class chia cột flex-row, giữ lại flex-col và căn giữa tuyệt đối
     <div className="bg-[#f9f9fe] font-body text-[#1a1c1f] min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden">
