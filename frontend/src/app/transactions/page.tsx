@@ -252,7 +252,7 @@ function TransactionsContent() {
             className="w-full flex items-center justify-center gap-3 bg-gradient-to-br from-[#4b5b9a] to-[#94a3e8] text-white py-4 rounded-2xl font-headline font-bold shadow-lg shadow-[#4b5b9a]/25 active:scale-95 transition-all outline-none"
           >
             <span className="material-symbols-outlined">file_download</span>
-            Xuất báo cáo PDF / Excel
+            Xuất báo cáo Excel
           </Link>
 
           <div className="flex gap-2">
