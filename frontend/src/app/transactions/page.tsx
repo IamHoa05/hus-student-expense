@@ -233,7 +233,7 @@ function TransactionsContent() {
             <span className="material-symbols-outlined animate-spin">
               autorenew
             </span>
-            Đang tải dữ liệu...
+            <p>Đang tải dữ liệu...</p>
           </div>
         )}
 
@@ -340,9 +340,10 @@ function TransactionsContent() {
                     {trans.map((tx) => (
                       <div
                         key={tx.id}
-                        className="bg-white p-3.5 rounded-xl flex items-center justify-between border border-[#e2e2e7]/50 shadow-sm"
+                        className="bg-white p-3.5 rounded-xl flex items-center justify-between gap-3 border border-[#e2e2e7]/50 shadow-sm"
                       >
-                        <div className="flex items-center gap-3">
+                        {/* Khối bên trái: Icon + Tiêu đề + Thời gian */}
+                        <div className="flex items-center gap-3 flex-grow flex-shrink min-w-0">
                           <div
                             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
                               tx.type === "income"
@@ -354,8 +355,9 @@ function TransactionsContent() {
                               {tx.icon}
                             </span>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-xs text-[#1a1c1f] truncate">
+                          {/* min-w-0 bắt buộc ở đây để kích hoạt truncate */}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-xs text-[#1a1c1f] truncate" title={tx.title}>
                               {tx.title}
                             </p>
                             <p className="text-[9px] text-[#767681] mt-0.5">
@@ -363,7 +365,9 @@ function TransactionsContent() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
+
+                        {/* Khối bên phải: Số tiền + Danh mục cố định không bóp méo */}
+                        <div className="text-right shrink-0 min-w-[85px]">
                           <p
                             className={`font-headline font-bold text-xs ${
                               tx.type === "income"
@@ -373,7 +377,7 @@ function TransactionsContent() {
                           >
                             {formatCurrency(tx.amount, tx.type)}
                           </p>
-                          <p className="text-[8px] text-[#767681] font-bold uppercase mt-0.5">
+                          <p className="text-[8px] text-[#767681] font-bold uppercase mt-0.5 truncate">
                             {tx.category}
                           </p>
                         </div>
@@ -455,7 +459,7 @@ function TransactionsContent() {
       </div>
 
       {/* ======================================================================= */}
-      {/* MODAL XEM ẢNH HÓA ĐƠN FULL SCREEN - CHỈ ẢNH, KHÔNG THÔNG TIN */}
+      {/* MODAL XEM ẢNH HÓA ĐƠN FULL SCREEN */}
       {/* ======================================================================= */}
       {selectedInvoice && (
         <div
@@ -466,7 +470,6 @@ function TransactionsContent() {
             className="w-full h-full flex items-center justify-center relative p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Nút đóng */}
             <button
               onClick={() => setSelectedInvoice(null)}
               className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white border-none outline-none active:scale-90 transition-transform"
@@ -474,7 +477,6 @@ function TransactionsContent() {
               <span className="material-symbols-outlined">close</span>
             </button>
 
-            {/* Ảnh hóa đơn hiện đủ, không crop */}
             {selectedInvoice.imageUrl ? (
               <img
                 src={selectedInvoice.imageUrl}
@@ -507,7 +509,7 @@ export default function TransactionsPage() {
   return (
     <main className="w-full max-w-md mx-auto h-screen bg-[#f9f9fe] overflow-hidden flex flex-col">
       <Suspense
-        fallback={
+        fallback = {
           <div className="w-full h-full flex flex-col items-center justify-center gap-3 py-20">
             <span className="material-symbols-outlined animate-spin text-[#4b5b9a] text-4xl">
               autorenew

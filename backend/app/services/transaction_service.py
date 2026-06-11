@@ -184,9 +184,25 @@ class TransactionService:
             ocr_raw=row.ocr_raw,
         )
     async def delete_transaction(self, user_id: int, transaction_id: int):
-        transaction = await self.get_transaction_by_id(user_id, transaction_id)
-        await self.db.delete(transaction)
+        # 1. Truy vấn trực tiếp SQLAlchemy Model từ Database
+        stmt = select(Transaction).where(
+            Transaction.transaction_id == transaction_id,
+            Transaction.user_id == user_id
+        )
+        result = await self.db.execute(stmt)
+        transaction_model = result.scalar_one_or_none()
+
+        # 2. Kiểm tra nếu không tồn tại giao dịch
+        if not transaction_model:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Không tìm thấy giao dịch hoặc bạn không có quyền xóa"
+            )
+
+        # 3. Tiến hành xóa Model hợp lệ
+        await self.db.delete(transaction_model)
         await self.db.commit()
+        
         return {"message": "Đã xóa giao dịch"}
 
     async def get_invoice_image(self, user_id: int, transaction_id: int) -> dict:
